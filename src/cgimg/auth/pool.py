@@ -1,10 +1,9 @@
 """Multi-account image-quota pool: select / probe / decrement / persist.
 
-Decides which ChatGPT account the engine uses per image: proactively probe
-``get_user_info`` for remaining quota (the engine has no rotate-on-quota path,
-so it must only receive a live account), stick to one account until its quota
-hits 0, then advance. Persisted hints skip known-dead accounts without a probe;
-the probe is always the source of truth. Sequential only; tokens never logged.
+Proactively probes ``get_user_info`` for remaining quota (the engine has no
+rotate-on-quota path, so it must only receive a live account), sticks to one
+account until it hits 0, then advances; persisted hints skip known-dead accounts
+without a probe (the probe stays source of truth). Sequential; tokens never logged.
 """
 from __future__ import annotations
 
@@ -130,10 +129,8 @@ class AccountPool:
         store.save_accounts(self._accounts)
 
     def probe(self, acc: dict[str, Any]) -> dict[str, Any]:
-        """Probe get_user_info, update + persist the account, backfill identity.
-
-        Returns ``{remaining, unknown, restore_at_epoch}``.
-        """
+        """Probe get_user_info; update + persist the account (backfilling identity);
+        return ``{remaining, unknown, restore_at_epoch}``."""
         if self._refresh_fn:
             try:
                 acc["access_token"] = self._refresh_fn(acc) or acc["access_token"]
@@ -166,8 +163,15 @@ class AccountPool:
         """True when no account is (hint-)available - used by the deck layer."""
         return not self._accounts or not any(self._hint_alive(a) for a in self._accounts)
 
-    def status(self) -> list[dict[str, Any]]:
-        """Per-account summary (hint-based, no probe) for CLI / MCP."""
+    def status(self, probe: bool = False) -> list[dict[str, Any]]:
+        """Per-account summary. probe=True live-probes each first (CLI `accounts`);
+        probe=False uses hints only - cheap, no network (MCP login_status)."""
+        if probe:
+            for acc in list(self._accounts):
+                try:
+                    self.probe(acc)
+                except Exception:
+                    pass
         return [
             {
                 "email": a.get("email") or "",

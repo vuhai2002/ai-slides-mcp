@@ -4,6 +4,7 @@ import argparse
 import sys
 from typing import get_args
 
+from cgimg.cli_accounts import _cmd_accounts, _cmd_logout
 from cgimg.types import Style, Thinking
 
 
@@ -25,10 +26,12 @@ def _add_brand_args(p: argparse.ArgumentParser) -> None:
 
 
 def _cmd_login(args: argparse.Namespace) -> int:
-    from cgimg.auth import oauth_login, tokens
+    from cgimg.auth import oauth_login, store
     if args.callback:
-        oauth_login.complete(args.callback)
-        print(f"[OK] Logged in. Saved to {tokens._auth_path()}")
+        acc = oauth_login.complete(args.callback)
+        email = acc.get("email") or "(email unknown until first run)"
+        total = len(store.load_accounts())
+        print(f"[OK] Added/updated {email}. {total} account(s) logged in.")
         return 0
     url = oauth_login.build_and_stash(args.email or "")
     print("\n1. A browser should have opened. If not, open this URL:\n")
@@ -36,6 +39,8 @@ def _cmd_login(args: argparse.Namespace) -> int:
     print("2. Log into ChatGPT. You'll land on a platform.openai.com page (may say 'Oops').")
     print("3. Copy the FULL URL from the address bar, then run:\n")
     print('   cgimg login --callback "<paste the URL here>"\n')
+    print("Tip: to add a DIFFERENT account, sign out of chatgpt.com first or use an")
+    print("     incognito/private window - login captures whichever account is signed in.\n")
     return 0
 
 
@@ -112,10 +117,19 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="cgimg")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    lg = sub.add_parser("login")
+    lg = sub.add_parser("login", help="log in a ChatGPT account (additive - run again to add more)")
     lg.add_argument("--callback", default=None, help="callback URL or code (step 2)")
     lg.add_argument("--email", default=None, help="optional email hint")
     lg.set_defaults(func=_cmd_login)
+
+    ac = sub.add_parser("accounts", help="list logged-in accounts with live quota")
+    ac.set_defaults(func=_cmd_accounts)
+
+    lo = sub.add_parser("logout", help="remove an account (by email/user_id) or --all")
+    lo.add_argument("selector", nargs="?", default=None, help="email or user_id to remove")
+    lo.add_argument("--all", dest="all_accounts", action="store_true",
+                    help="remove ALL accounts")
+    lo.set_defaults(func=_cmd_logout)
 
     g = sub.add_parser("gen")
     g.add_argument("prompt")

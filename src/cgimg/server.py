@@ -9,9 +9,17 @@ mcp = FastMCP("ai-slides")
 
 @mcp.tool()
 def login_status() -> dict:
-    """Check whether a ChatGPT account is logged in for image generation."""
-    from cgimg.auth import tokens
-    return tokens.login_status()
+    """Check logged-in ChatGPT accounts. Cheap + hint-based (no network probe):
+    returns {authed, accounts:[{email, type, alive, restore_at}], ready_count}.
+    ready_count is from persisted hints; for live quota run the CLI `cgimg accounts`."""
+    from cgimg.auth.pool import AccountPool
+    rows = AccountPool().status()  # hints only, no network
+    return {
+        "authed": len(rows) > 0,
+        "accounts": [{"email": r["email"], "type": r["type"],
+                      "alive": r["alive"], "restore_at": r["restore_at"]} for r in rows],
+        "ready_count": sum(1 for r in rows if r["alive"]),
+    }
 
 
 @mcp.tool()

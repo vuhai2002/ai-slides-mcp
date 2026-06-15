@@ -93,8 +93,35 @@ def build_and_stash(email_hint: str = "") -> str:
     return url
 
 
-def complete(callback: str) -> dict[str, str]:
-    """Step 2: read stashed verifier, exchange code, save tokens. Returns the tokens."""
+def _account_from_tokens(toks: dict[str, str]) -> dict:
+    """Build an account record, probing get_user_info once for user_id/email/type.
+
+    Best-effort: if the probe fails (network), still return a usable account with
+    an empty user_id - the first real run's probe backfills it. Never aborts login.
+    """
+    account = {
+        "access_token": toks["access_token"],
+        "refresh_token": toks["refresh_token"],
+        "id_token": toks.get("id_token", ""),
+        "user_id": "",
+    }
+    try:
+        from services.openai_backend_api import OpenAIBackendAPI
+        info = OpenAIBackendAPI(access_token=toks["access_token"]).get_user_info()
+        account["user_id"] = info.get("user_id") or ""
+        account["email"] = info.get("email") or ""
+        account["type"] = info.get("type") or "free"
+        q = info.get("quota")
+        if isinstance(q, (int, float)) and not info.get("image_quota_unknown"):
+            account["last_quota"] = int(q)  # seed the hint for the first run
+    except Exception:
+        pass
+    return account
+
+
+def complete(callback: str) -> dict:
+    """Step 2: read stashed verifier, exchange code, UPSERT the account into the
+    pool (deduped by user_id). Returns the account record."""
     p = _pending_path()
     if not p.exists():
         raise RuntimeError("no pending login — run `cgimg login` first")
@@ -103,9 +130,11 @@ def complete(callback: str) -> dict[str, str]:
         raise RuntimeError("pending login is corrupt — run `cgimg login` again")
     code = extract_code(callback)
     toks = exchange_code(code, verifier)
-    _tokens.save(toks)
+    account = _account_from_tokens(toks)
+    from cgimg.auth import store
+    store.upsert_account(account)
     try:
         p.unlink()
     except OSError:
         pass
-    return toks
+    return account
