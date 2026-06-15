@@ -1,0 +1,13 @@
+This project vendors code from chatgpt2api (https://github.com/basketikun/chatgpt2api)
+Copyright (c) 2026 kunkun - MIT License.
+Vendored files live under src/cgimg/_vendor/ and retain their original behavior.
+
+The VERBATIM subset (image-gen + OAuth core) is synced verbatim from a pinned
+upstream commit - see VENDOR_REV for the exact SHA. Re-sync with
+scripts/update-vendor.sh (or update-vendor.ps1 on Windows).
+
+A few files are LOCAL adaptations and are NOT overwritten on update:
+  - src/cgimg/_vendor/__init__.py                  (package marker; no upstream counterpart)
+  - src/cgimg/_vendor/services/account_service.py  (single-account shim replacing the multi-account pool)
+  - src/cgimg/_vendor/services/protocol/__init__.py (trimmed to avoid importing un-vendored modules)
+  - src/cgimg/_vendor/services/storage/factory.py  (JSON-only storage factory)
