@@ -20,8 +20,9 @@ Provided **as-is, with no warranty**. You assume all risk. If you are not comfor
 - Builds full-bleed PowerPoint (`.pptx`) decks from a set of images.
 - **Branded decks**: auto-detects brand colors from your logo, generates slides in those colors, and composites your logo onto every slide.
 - **Styled decks**: matches the design style and palette of a reference image (without copying its text/content).
+- **Multiple accounts (auto-rotation)**: log in several ChatGPT accounts; the tool probes each account's remaining image quota and rotates to the next when one runs dry, so several free accounts' daily caps combine into one deck. If all run out mid-deck you get a partial deck plus when quota resets.
 - Works as an MCP server across **Claude Code, Codex, and Antigravity** over stdio.
-- Single-account, fully local auth — your token never leaves your machine.
+- Multi-account, fully local auth - your tokens never leave your machine.
 
 ## Requirements
 
@@ -105,12 +106,12 @@ Six tools are exposed by the server (`src/cgimg/server.py`):
 
 | Tool | Params | Returns | Description |
 |------|--------|---------|-------------|
-| `login_status` | — | `{authed, ...}` | Check whether a ChatGPT account is logged in. |
+| `login_status` | — | `{authed, accounts, ready_count}` | List logged-in accounts (cheap, hint-based; use the CLI `cgimg accounts` for live quota). |
 | `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None` | `{paths}` | Generate `n` image(s) from a prompt. Returns saved PNG paths. |
 | `build_pptx` | `image_paths`, `out_path="deck.pptx"`, `aspect="16:9"` | `{path}` | Assemble existing images into a full-bleed PPTX. |
-| `generate_slide_deck` | `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `enhance=True`, `style="slide"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None` | `{path, image_paths}` | Generate one image per prompt (one slide each, named `s01.png`...), then assemble into a PPTX. |
-| `branded_deck` | `logo_path`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `logo_position="top-left"`, `logo_scale=0.15`, `thinking="auto"` | `{path, image_paths, brand_colors}` | Auto-detects brand colors from the logo, generates slides in those colors, and composites the **original logo** onto each slide. |
-| `styled_deck` | `ref_image`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `thinking="auto"` | `{path, image_paths, brand_colors}` | Matches a **reference image's** design style + colors (does **not** copy its text/content). |
+| `generate_slide_deck` | `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `enhance=True`, `style="slide"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None` | `{path, image_paths, incomplete, generated, total, reset_at}` | Generate one image per prompt (one slide each, named `s01.png`...), then assemble into a PPTX. Returns a partial deck (`incomplete=true`) if accounts run out of quota. |
+| `branded_deck` | `logo_path`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `logo_position="top-left"`, `logo_scale=0.15`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Auto-detects brand colors from the logo, generates slides in those colors, and composites the **original logo** onto each slide. |
+| `styled_deck` | `ref_image`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Matches a **reference image's** design style + colors (does **not** copy its text/content). |
 
 For `generate_slide_deck` / `branded_deck` / `styled_deck`, each prompt is the **content of one slide** — pass raw slide content and the enhancer designs it.
 
@@ -147,6 +148,16 @@ Higher effort noticeably improves text fidelity inside the image. If generated s
 # 1. Log in (two-step, see Install above)
 uv run cgimg login
 uv run cgimg login --callback "<paste callback URL>"
+
+# Multiple accounts (auto-rotation): repeat the login for EACH account. To add a
+# DIFFERENT account, sign out of chatgpt.com first or use an incognito/private
+# window (login captures whichever account is signed in). Then:
+uv run cgimg accounts                    # list accounts with live remaining quota
+uv run cgimg logout you@example.com      # remove one (by email or user_id)
+uv run cgimg logout --all                # remove every account
+#   The pool auto-rotates: it drains one account, then moves to the next. A deck
+#   bigger than your total quota stops and returns a PARTIAL deck + reset time.
+#   Note: rotating many accounts raises ban-detection risk - use throwaway accounts.
 
 # 2. Generate image(s)  (auto-enhance is ON by default; add --no-enhance to send the prompt as-is)
 uv run cgimg gen "a serene mountain lake at dawn" --aspect 16:9 --n 1 --out out

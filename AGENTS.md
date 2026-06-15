@@ -25,14 +25,20 @@ for agents that **develop** the repo, and as a human-readable mirror of the tool
 
 | Tool | Key params (defaults) | Returns |
 |------|-----------------------|---------|
-| `login_status` | - | `{authed, ...}` |
+| `login_status` | - | `{authed, accounts, ready_count}` |
 | `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"` | `{paths}` |
 | `build_pptx` | `image_paths`, `out_path="deck.pptx"`, `aspect="16:9"` | `{path}` |
-| `generate_slide_deck` | `prompts`, `aspect`, `out_pptx`, `out_dir`, `enhance=True`, `style="slide"`, `thinking="auto"` | `{path, image_paths}` |
-| `branded_deck` | `logo_path`, `prompts`, ..., `logo_position`, `logo_scale`, `thinking="auto"` | `{path, image_paths, brand_colors}` |
-| `styled_deck` | `ref_image`, `prompts`, ..., `thinking="auto"` | `{path, image_paths, brand_colors}` |
+| `generate_slide_deck` | `prompts`, `aspect`, `out_pptx`, `out_dir`, `enhance=True`, `style="slide"`, `thinking="auto"` | `{path, image_paths, incomplete, generated, total, reset_at}` |
+| `branded_deck` | `logo_path`, `prompts`, ..., `logo_position`, `logo_scale`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` |
+| `styled_deck` | `ref_image`, `prompts`, ..., `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` |
 
-The same functions back the CLI (`uv run cgimg <gen|ppt|branded|styled|login>`).
+The same functions back the CLI (`uv run cgimg <gen|ppt|branded|styled|login|accounts|logout>`).
+
+`login_status` returns the account pool summary from cheap persisted hints
+(`{authed, accounts:[{email,type,alive,restore_at}], ready_count}`); the CLI
+`accounts` command live-probes for current quota. The deck tools may return a
+PARTIAL deck when every account is out of quota (`incomplete=True` + `generated`
+/`total`/`reset_at`).
 
 ### Parameter value sets (enforced as schema enums - keep in `src/cgimg/types.py`)
 - `aspect`: `16:9` `1:1` `3:4` `4:3` `9:16`, or raw `WxH` (free string, not an enum).
@@ -46,7 +52,7 @@ The same functions back the CLI (`uv run cgimg <gen|ppt|branded|styled|login>`).
 ```bash
 uv sync
 uv run cgimg login                              # then: cgimg login --callback "<url>"
-uv run pytest                                   # 32 tests, must pass
+uv run pytest                                   # all tests must pass
 uv run cgimg gen "test" --aspect 4:3 --thinking max --no-enhance
 ```
 
@@ -59,7 +65,9 @@ Layout:
 - `src/cgimg/_vendor/` - chatgpt2api, vendored. Two classes of file:
   - **VERBATIM** - byte-identical to upstream, auto-re-pulled. Everything except:
   - **LOCAL shims** - ours, never auto-overwritten: `services/account_service.py`
-    (single-account shim), `services/protocol/__init__.py`,
+    (account-pool shim - delegates token selection/result/refresh to our
+    `AccountPool` via the injected `set_pool_provider`; imports nothing from
+    `cgimg`), `services/protocol/__init__.py`,
     `services/storage/factory.py`, `_vendor/__init__.py`.
 
 Rules (important):
@@ -78,6 +86,11 @@ Rules (important):
 - Python 3.12, `uv`. Files < 200 lines, kebab-case names, descriptive comments.
 - `thinking`/`style` value sets live ONCE in `src/cgimg/types.py` (drives both the
   MCP schema enums and the CLI `choices`). Add new values there, not inline.
+- Multi-account auth lives in `auth/`: `store.py` (versioned `auth.json` v2 +
+  legacy migration), `pool.py` (`AccountPool` - probe/rotate/decrement/persist),
+  `reset_at.py` (parse quota-reset times), `probe.py` (the one network probe). The
+  vendored engine reaches the pool ONLY through `set_pool_provider` wired in
+  `generate.py`; never import `cgimg.*` from `_vendor/`.
 - Plain ASCII punctuation in generated text; **preserve Vietnamese diacritics**.
 - Don't commit `auth.json` or any secret.
 
@@ -86,7 +99,14 @@ Rules (important):
   `--no-enhance` + a verbatim prompt.
 - Generation is slow (~30-120s; higher `thinking` is slower). Expected, not a hang.
 - Auth token: `%APPDATA%\cgimg\auth.json` (Windows) / `~/.config/cgimg/auth.json`.
-  Re-run `cgimg login` if expired.
+  Now a v2 multi-account file (`{version, accounts:[...]}`); a legacy single-account
+  file auto-migrates on first read. Re-run `cgimg login` if expired.
+- Image quota is per ChatGPT account (free ~ a few/day). Log in several accounts
+  (`cgimg login` repeatedly - sign out of chatgpt.com or use incognito to add a
+  different one); the pool auto-rotates when one runs dry. `cgimg accounts` shows
+  live quota; `cgimg logout <sel>|--all` removes. A deck that outruns total quota
+  returns a PARTIAL deck (`incomplete/generated/total/reset_at`). Rotating many
+  accounts raises ban risk - use throwaway accounts.
 - `scratch/` is gitignored - the update-vendor upstream checkout lives there.
 
 ## Pointers
