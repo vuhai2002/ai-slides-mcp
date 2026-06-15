@@ -17,47 +17,14 @@ os.environ.setdefault("CHATGPT2API_AUTH_KEY", "cgimg-local")
 # Make the vendored `services.*` / `utils.*` packages importable.
 import cgimg._vendor_path  # noqa: F401  (side-effect: prepends _vendor to sys.path)
 
-from cgimg.auth import tokens
-from cgimg.auth.pool import AccountPool
 from cgimg.sizes import resolve_size
 from cgimg.types import Style, Thinking
 
-# Build the multi-account pool and wire its callables into the vendored shim
-# BEFORE the engine asks for a token. A single logged-in account is just a
-# 1-element pool, so there is ONE code path. set_pool_provider takes plain
-# callables, so the vendored shim never imports cgimg. The pool is built lazily
-# on first use, so merely importing this module does not read/migrate auth.json.
-from services.account_service import set_pool_provider  # noqa: E402
-
-_pool: "AccountPool | None" = None
-
-
-def get_pool() -> AccountPool:
-    """Process-wide account pool (lazy: store is read on first real use)."""
-    global _pool
-    if _pool is None:
-        _pool = AccountPool(refresh_fn=tokens.refresh_for)
-    return _pool
-
-
-set_pool_provider(
-    select=lambda: get_pool().select(),
-    on_result=lambda token, ok: get_pool().on_result(token, ok),
-    account_lookup=lambda token: get_pool().account_for(token),
-    text_token=lambda: get_pool().current_token(),
-    refresh=lambda token: get_pool().refresh_token(token),
-    remove=lambda token: get_pool().disable_token(token),
-)
-
-
-def pool_exhausted_reset() -> "tuple[bool, str | None]":
-    """(all accounts exhausted?, soonest reset ISO or None) for partial-deck handling.
-    Asks the pool directly - robust vs string-matching the engine's wrapped error."""
-    pool = get_pool()
-    if not pool.is_exhausted():
-        return False, None
-    resets = [r["restore_at"] for r in pool.status() if r.get("restore_at")]
-    return True, (min(resets) if resets else None)
+# Importing this wires the multi-account pool into the vendored shim AND forces
+# sequential generation (side effects on import); it also exposes the pool
+# accessors used here (get_pool) and re-exported for the deck layer
+# (pool_exhausted_reset).
+from cgimg.engine.account_wiring import get_pool, pool_exhausted_reset  # noqa: F401
 
 from services.protocol.conversation import (  # noqa: E402
     ConversationRequest,

@@ -87,15 +87,21 @@ def load_accounts() -> list[dict[str, Any]]:
 
 
 def save_accounts(accounts: list[dict[str, Any]]) -> None:
-    """Write the v2 file (indent=2, utf-8) with best-effort chmod 600."""
+    """Write the v2 file atomically (temp + os.replace), indent=2 utf-8, chmod 600.
+
+    The temp-then-rename avoids a torn auth.json if the process dies (or, before
+    the sequential-generation guard, raced) mid-write.
+    """
     p = _auth_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = {"version": CURRENT_VERSION, "accounts": list(accounts)}
-    p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     try:
-        os.chmod(p, 0o600)
+        os.chmod(tmp, 0o600)
     except OSError:
         pass
+    os.replace(tmp, p)  # atomic on the same filesystem
 
 
 def upsert_account(acc: dict[str, Any]) -> None:

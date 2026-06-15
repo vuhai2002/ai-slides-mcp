@@ -14,6 +14,9 @@ from typing import Optional
 
 # A value at/above this is read as an absolute epoch; below it, as a duration.
 _PLAUSIBLE_EPOCH_FLOOR = 1_000_000_000  # ~2001-09-09
+# A real image-quota reset is never this far out; a result beyond it means we
+# misparsed an unknown upstream format (e.g. milliseconds read as seconds).
+_MAX_FUTURE = 7 * 24 * 3600  # 7 days
 
 
 def _num_to_epoch(value: float, now: float) -> float:
@@ -23,14 +26,9 @@ def _num_to_epoch(value: float, now: float) -> float:
     return now + max(0.0, value)
 
 
-def to_epoch(raw: object, now: float) -> Optional[float]:
-    """Best-effort parse of a reset value to epoch seconds.
-
-    Returns None for empty / unparseable input (caller decides the fallback).
-    """
-    if raw is None:
-        return None
-    if isinstance(raw, bool):  # guard: bool is an int subclass
+def _parse(raw: object, now: float) -> Optional[float]:
+    """Parse a reset value to epoch seconds, or None if empty/unparseable."""
+    if raw is None or isinstance(raw, bool):  # bool is an int subclass - reject
         return None
     if isinstance(raw, (int, float)):
         return _num_to_epoch(float(raw), now)
@@ -48,6 +46,21 @@ def to_epoch(raw: object, now: float) -> Optional[float]:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.timestamp()
+
+
+def to_epoch(raw: object, now: float) -> Optional[float]:
+    """Best-effort parse to epoch seconds; None for empty/unparseable input.
+
+    Clamps an implausibly-far result (a misparsed unknown upstream format, e.g. a
+    millisecond value read as seconds) to now+24h, so a bad reset_after can never
+    bench an account for years - the probe stays the source of truth and corrects it.
+    """
+    epoch = _parse(raw, now)
+    if epoch is None:
+        return None
+    if epoch > now + _MAX_FUTURE:
+        return now + 24 * 3600.0
+    return epoch
 
 
 def to_iso(epoch: float) -> str:

@@ -70,6 +70,14 @@ def test_text_and_image_share_active_account(tmp_path, monkeypatch):
     assert svc.get_available_access_token() == "tokA"   # image sticks to same
 
 
+def test_image_generation_forced_sequential():
+    # H1 guard: importing the engine flips the vendored parallel flag off so the
+    # unlocked AccountPool singleton is never driven by concurrent threads (n>1).
+    import cgimg.engine.generate  # noqa: F401
+    from services.config import config
+    assert config.image_parallel_generation is False
+
+
 def test_shim_does_not_import_cgimg():
     # AST so a docstring mentioning "from cgimg" does not count - only real imports.
     src = (Path(cgimg._vendor_path.__file__).resolve().parent
