@@ -5,13 +5,10 @@ Falls back to a deterministic template wrapper if the text call fails.
 The verbose system-prompt / template strings live in enhance_templates.py."""
 from __future__ import annotations
 
-import os
-
-# The vendored config.py instantiates a ConfigStore at IMPORT time and raises
-# if no auth-key is set. Satisfy it before any vendored import (those imports
-# are inside enhance_prompt, but enhance.py may be imported standalone).
-os.environ.setdefault("CHATGPT2API_AUTH_KEY", "cgimg-local")
-import cgimg._vendor_path  # noqa: F401  (side-effect: prepends _vendor to sys.path)
+# Importing _vendor_path makes the vendored `services.*` importable AND sets the
+# vendored config's required auth-key env (single source: see _vendor_path).
+# enhance.py may be imported standalone, so do it at module load.
+import cgimg._vendor_path  # noqa: F401  (side-effect: _vendor on sys.path + auth-key env)
 
 from cgimg.engine.enhance_templates import (  # noqa: E402
     FINTECH_SYSTEM,

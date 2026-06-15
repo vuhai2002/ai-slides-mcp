@@ -9,13 +9,9 @@ import os
 import sys
 import time
 
-# The vendored config.py instantiates a ConfigStore at IMPORT time and raises
-# ValueError if no auth-key is set. Satisfy it BEFORE importing any engine
-# module. This key is unrelated to our OAuth token.
-os.environ.setdefault("CHATGPT2API_AUTH_KEY", "cgimg-local")
-
-# Make the vendored `services.*` / `utils.*` packages importable.
-import cgimg._vendor_path  # noqa: F401  (side-effect: prepends _vendor to sys.path)
+# Make the vendored `services.*` / `utils.*` importable; this also sets the
+# vendored config's required auth-key env var (single source: see _vendor_path).
+import cgimg._vendor_path  # noqa: F401  (side-effect: _vendor on sys.path + auth-key env)
 
 from cgimg.sizes import resolve_size
 from cgimg.types import Style, Thinking

@@ -24,3 +24,20 @@ def test_image_storage_imports():
     import importlib
     mod = importlib.import_module("services.image_storage_service")
     assert hasattr(mod, "image_storage_service")
+
+
+def test_vendored_imports_without_preset_auth_key():
+    """Regression: the login / accounts paths import vendored code via
+    _vendor_path WITHOUT separately setting CHATGPT2API_AUTH_KEY. _vendor_path
+    must set it so the vendored config can import - otherwise the get_user_info
+    probe fails silently and accounts show no email/quota. Run in a fresh process
+    with the key removed to prove _vendor_path alone is sufficient."""
+    import subprocess
+    import sys
+
+    clean_env = {k: v for k, v in os.environ.items() if k != "CHATGPT2API_AUTH_KEY"}
+    code = "import cgimg._vendor_path; import services.openai_backend_api; print('ok')"
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True,
+                       text=True, env=clean_env)
+    assert r.returncode == 0, r.stderr
+    assert "ok" in r.stdout

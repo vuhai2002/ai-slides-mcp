@@ -9,12 +9,9 @@ Keeps the vendored shim free of any cgimg import (we pass plain callables).
 """
 from __future__ import annotations
 
-import os
-
-# The vendored config.py builds a ConfigStore at import and needs an auth key.
-os.environ.setdefault("CHATGPT2API_AUTH_KEY", "cgimg-local")
-
-import cgimg._vendor_path  # noqa: E402,F401  (side effect: _vendor on sys.path)
+# Importing _vendor_path puts the vendored `services.*` on sys.path AND sets the
+# vendored config's required auth-key env (single source: see _vendor_path).
+import cgimg._vendor_path  # noqa: F401  (side effect: _vendor on sys.path + auth-key env)
 from cgimg.auth import tokens  # noqa: E402
 from cgimg.auth.pool import AccountPool  # noqa: E402
 
