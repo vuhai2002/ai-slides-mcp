@@ -12,3 +12,6 @@ src/cgimg/_vendor/data/
 
 # Upstream checkout used by scripts/update-vendor.sh (re-cloned on demand)
 scratch/
+
+# Local planning/notes (CK workflow) - not part of the repo
+plans/
