@@ -11,7 +11,7 @@ import time
 from typing import Any, Callable, Optional
 
 from cgimg.auth import reset_at, store
-from cgimg.auth.probe import default_probe
+from cgimg.auth.probe import default_probe, probe_account
 
 ProbeFn = Callable[[dict[str, Any]], dict[str, Any]]
 RefreshFn = Callable[[dict[str, Any]], str]
@@ -73,7 +73,10 @@ class AccountPool:
         # Prefer hint-alive accounts; if none, probe all (a stale hint may lie).
         alive = [a for a in self._accounts if self._hint_alive(a)]
         for acc in (alive or list(self._accounts)):
-            res = self.probe(acc)
+            try:
+                res = self.probe(acc)
+            except Exception:
+                continue  # probe failed (invalid/expired token, flaky backend) -> next
             if res["unknown"] or (res["remaining"] or 0) > 0:
                 self._active_token = str(acc.get("access_token") or "")
                 return self._active_token
@@ -130,12 +133,7 @@ class AccountPool:
     def probe(self, acc: dict[str, Any]) -> dict[str, Any]:
         """Probe get_user_info; update + persist the account (backfilling identity);
         return ``{remaining, unknown, restore_at_epoch}``."""
-        if self._refresh_fn:
-            try:
-                acc["access_token"] = self._refresh_fn(acc) or acc["access_token"]
-            except Exception:
-                pass
-        info = self._probe_fn(acc)
+        info = probe_account(acc, self._probe_fn, self._refresh_fn)
         unknown = bool(info.get("image_quota_unknown"))
         q = info.get("quota")
         remaining = int(q) if isinstance(q, (int, float)) and not isinstance(q, bool) else None
@@ -168,12 +166,13 @@ class AccountPool:
     def status(self, probe: bool = False) -> list[dict[str, Any]]:
         """Per-account summary. probe=True live-probes each first (CLI `accounts`);
         probe=False uses hints only - cheap, no network (MCP login_status)."""
+        failed: set[str] = set()
         if probe:
             for acc in list(self._accounts):
                 try:
                     self.probe(acc)
                 except Exception:
-                    pass
+                    failed.add(str(acc.get("access_token") or ""))
         return [
             {
                 "email": a.get("email") or "",
@@ -183,6 +182,7 @@ class AccountPool:
                 "restore_at": a.get("restore_at"),
                 "quota_reset_at": a.get("quota_reset_at"),
                 "alive": self._hint_alive(a),
+                "probe_failed": str(a.get("access_token") or "") in failed,
             }
             for a in self._accounts
         ]

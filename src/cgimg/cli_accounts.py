@@ -25,7 +25,8 @@ def _cmd_accounts(args: argparse.Namespace) -> int:
         email = r["email"] or "(unknown)"
         remaining = "unknown" if r["remaining"] is None else str(r["remaining"])
         resets = r.get("quota_reset_at") or r.get("restore_at") or "-"
-        state = "alive" if r["alive"] else "exhausted"
+        state = ("probe failed" if r.get("probe_failed")
+                 else "alive" if r["alive"] else "exhausted")
         print(f"{email:<30} {r['type']:<7} {remaining:<10} {resets:<22} {state}")
     return 0
 

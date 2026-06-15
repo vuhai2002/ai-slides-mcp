@@ -185,3 +185,60 @@ def test_disable_token_benches_account(seeded):
     acc = store.load_accounts()[0]
     assert acc["restore_at"]
     assert p._hint_alive(acc) is False
+
+
+# ---- robustness: probe failures / invalid tokens (A / B / C) ----
+
+def test_select_skips_account_whose_probe_raises(seeded):
+    seeded([
+        {"user_id": "uA", "access_token": "tokA"},
+        {"user_id": "uB", "access_token": "tokB"},
+    ])
+
+    def probe_fn(acc):
+        if acc["access_token"] == "tokA":
+            raise RuntimeError("boom")   # A's probe fails -> select must skip to B
+        return {"quota": 3, "image_quota_unknown": False, "user_id": "uB"}
+
+    p = pool_mod.AccountPool(probe_fn=probe_fn, now_fn=lambda: NOW)
+    assert p.select() == "tokB"
+
+
+def test_probe_force_refreshes_on_invalid_token(seeded):
+    seeded([{"user_id": "uA", "access_token": "old", "refresh_token": "r"}])
+
+    class InvalidAccessTokenError(RuntimeError):
+        pass
+
+    calls = {"probe": 0}
+
+    def flaky_probe(acc):
+        calls["probe"] += 1
+        if calls["probe"] == 1:
+            raise InvalidAccessTokenError("token invalidated")
+        return {"quota": 4, "image_quota_unknown": False, "user_id": "uA"}
+
+    forced = {"v": False}
+
+    def refresh(acc, force=False):
+        if force:
+            forced["v"] = True
+            acc["access_token"] = "newtok"
+        return acc["access_token"]
+
+    p = pool_mod.AccountPool(probe_fn=flaky_probe, refresh_fn=refresh, now_fn=lambda: NOW)
+    assert p.select() == "newtok"        # recovered via force-refresh + retry
+    assert forced["v"] is True
+    assert calls["probe"] == 2
+    assert store.load_accounts()[0]["last_quota"] == 4
+
+
+def test_status_marks_probe_failed(seeded):
+    seeded([{"user_id": "uA", "access_token": "tokA", "last_quota": 5}])
+
+    def boom(acc):
+        raise RuntimeError("x")
+
+    p = pool_mod.AccountPool(probe_fn=boom, now_fn=lambda: NOW)
+    assert p.status(probe=True)[0]["probe_failed"] is True
+    assert p.status()[0]["probe_failed"] is False   # hint-only never flags failure

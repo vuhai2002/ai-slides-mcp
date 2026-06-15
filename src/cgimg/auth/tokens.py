@@ -79,18 +79,20 @@ def get_access_token(force: bool = False) -> str:
     return tok["access_token"]
 
 
-def refresh_for(account: dict[str, Any]) -> str:
+def refresh_for(account: dict[str, Any], force: bool = False) -> str:
     """Refresh ONE pool account's access_token via its refresh_token.
 
-    Used by the multi-account pool (AccountPool refresh hook). Returns the current
-    token unchanged when it is still fresh or there is no refresh_token; otherwise
-    refreshes and persists the new tokens through the v2 store (deduped by user_id).
+    Used by the multi-account pool. Returns the current token unchanged when it is
+    still fresh (and not forced) or there is no refresh_token; otherwise refreshes
+    and persists the new tokens through the v2 store (deduped by user_id).
+    force=True refreshes even when the token still looks fresh - used to recover a
+    token the backend just rejected as invalid.
     """
     from cgimg.auth import store  # local import avoids a store<->tokens cycle
 
     tok = str(account.get("access_token") or "")
     fresh = (time.time() - (account.get("saved_at") or 0)) <= _REFRESH_AFTER
-    if fresh or not account.get("refresh_token"):
+    if (fresh and not force) or not account.get("refresh_token"):
         return tok
     new = _refresh_request(account["refresh_token"])
     account["access_token"] = new.get("access_token") or tok
