@@ -76,7 +76,7 @@ def build_slide_deck(
         except Exception:
             exhausted, reset_at = pool_exhausted_reset()
             if exhausted:
-                print(f"[slide_deck] hết quota ảnh tại slide {i}/{total}; dừng lại.",
+                print(f"[slide_deck] out of image quota at slide {i}/{total}; stopping.",
                       file=sys.stderr)
                 break
             raise  # non-quota failure -> unchanged behaviour

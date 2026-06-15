@@ -5,6 +5,7 @@ import sys
 from typing import get_args
 
 from cgimg.cli_accounts import _cmd_accounts, _cmd_logout
+from cgimg.console import force_utf8
 from cgimg.types import Style, Thinking
 
 
@@ -121,6 +122,7 @@ def _cmd_styled(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    force_utf8()  # UTF-8 output so non-ASCII paths/emails never crash a cp1252 console
     p = argparse.ArgumentParser(prog="cgimg")
     sub = p.add_subparsers(dest="cmd", required=True)
 

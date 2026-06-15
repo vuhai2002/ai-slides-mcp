@@ -49,7 +49,7 @@ def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
         except Exception:
             exhausted, reset_at = pool_exhausted_reset()
             if exhausted:
-                print(f"[branded_deck] hết quota ảnh tại slide {i + 1}/{total}; dừng lại.",
+                print(f"[branded_deck] out of image quota at slide {i + 1}/{total}; stopping.",
                       file=sys.stderr)
                 break
             raise  # non-quota failure -> unchanged behaviour
@@ -103,7 +103,7 @@ def styled_deck(ref_image: str, prompts: list[str], aspect: str = "16:9",
             except Exception as exc:
                 exhausted, reset_at = pool_exhausted_reset()
                 if exhausted:
-                    print(f"[styled_deck] hết quota ảnh tại slide {i + 1}; dừng lại.",
+                    print(f"[styled_deck] out of image quota at slide {i + 1}; stopping.",
                           file=sys.stderr)
                     break
                 print(f"[styled_deck] slide {i + 1} attempt {attempt} failed: {exc}",

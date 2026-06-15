@@ -37,7 +37,7 @@ def test_login_complete_upserts_by_user_id(tmp_path, monkeypatch):
 def test_accounts_zero_message(store_at, capsys):
     rc = cli.main(["accounts"])
     assert rc == 0
-    assert "Chưa đăng nhập account nào" in capsys.readouterr().out
+    assert "No accounts logged in" in capsys.readouterr().out
 
 
 def test_accounts_lists_with_live_probe(store_at, monkeypatch, capsys):

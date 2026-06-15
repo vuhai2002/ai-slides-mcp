@@ -64,7 +64,7 @@ def test_sticks_then_advances_then_raises(seeded):
 
     with pytest.raises(pool_mod.NoQuotaError) as exc:
         p.select()                       # all dead -> probe both, none usable
-    assert "hết quota" in str(exc.value)
+    assert "out of image quota" in str(exc.value)
     assert exc.value.restore_at_epoch is not None
 
 
@@ -112,7 +112,7 @@ def test_probe_backfills_user_id_and_email(seeded):
 def test_no_accounts_raises(seeded):
     seeded([])
     p = _pool(StubProbe({}))
-    with pytest.raises(pool_mod.NoQuotaError, match="Chưa đăng nhập"):
+    with pytest.raises(pool_mod.NoQuotaError, match="No accounts logged in"):
         p.select()
 
 

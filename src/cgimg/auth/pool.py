@@ -69,7 +69,7 @@ class AccountPool:
             if acc is not None and self._stickable(acc):
                 return self._active_token
         if not self._accounts:
-            raise NoQuotaError("Chưa đăng nhập account nào - chạy `cgimg login`.")
+            raise NoQuotaError("No accounts logged in - run `cgimg login`.")
         # Prefer hint-alive accounts; if none, probe all (a stale hint may lie).
         alive = [a for a in self._accounts if self._hint_alive(a)]
         for acc in (alive or list(self._accounts)):
@@ -195,6 +195,6 @@ class AccountPool:
     def _exhausted_message(self, soonest: Optional[float]) -> str:
         n = len(self._accounts)
         if soonest:
-            return (f"Tất cả {n} account đã hết quota ảnh. "
-                    f"Account hồi phục sớm nhất lúc {reset_at.to_iso(soonest)}.")
-        return f"Tất cả {n} account đã hết quota ảnh."
+            return (f"All {n} account(s) are out of image quota. "
+                    f"Soonest reset at {reset_at.to_iso(soonest)}.")
+        return f"All {n} account(s) are out of image quota."

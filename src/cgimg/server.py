@@ -116,6 +116,8 @@ def styled_deck(ref_image: str, prompts: list[str], aspect: str = "16:9",
 
 
 def main() -> None:
+    from cgimg.console import force_utf8
+    force_utf8()  # UTF-8 stderr so non-ASCII progress lines / paths never crash a cp1252 console
     mcp.run()
 
 
