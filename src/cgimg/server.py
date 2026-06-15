@@ -76,7 +76,11 @@ def generate_slide_deck(prompts: list[str], aspect: str = "16:9",
 
     thinking ('auto'/'standard'/'extended'/'max') sets image reasoning effort;
     higher renders Vietnamese text more reliably but is slower. brand_colors +
-    reserve_corner work as in generate_image. Slides are named s01.png, s02.png..."""
+    reserve_corner work as in generate_image. Slides are named s01.png, s02.png...
+
+    If every logged-in account runs out of image quota mid-deck, generation stops
+    and a PARTIAL deck is returned: the result carries incomplete=True, generated,
+    total, and reset_at (when quota next resets). Re-run later to make the rest."""
     from cgimg.engine.decks import build_slide_deck
     return build_slide_deck(prompts, aspect=aspect, out_pptx=out_pptx, out_dir=out_dir,
                             enhance=enhance, style=style, brand_colors=brand_colors,

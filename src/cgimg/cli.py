@@ -69,6 +69,21 @@ def _load_prompts(args: argparse.Namespace) -> list[str]:
     return prompts
 
 
+def _print_deck(result: dict, *, colors: bool = False) -> None:
+    """Print a deck result: path, optional brand colors, partial note, image paths."""
+    if result.get("path"):
+        print(f"deck: {result['path']}")
+    if colors and result.get("brand_colors"):
+        print(f"brand_colors: {', '.join(result['brand_colors'])}")
+    if result.get("incomplete"):
+        msg = f"[incomplete] {result['generated']}/{result['total']} slide(s) done"
+        if result.get("reset_at"):
+            msg += f"; quota resets at {result['reset_at']}"
+        print(msg, file=sys.stderr)
+    for p in result["image_paths"]:
+        print(p)
+
+
 def _cmd_deck(args: argparse.Namespace) -> int:
     from cgimg.engine.decks import build_slide_deck
     brand_colors = [args.accent] if args.accent else None
@@ -76,9 +91,7 @@ def _cmd_deck(args: argparse.Namespace) -> int:
                               out_dir=args.out_dir, enhance=args.enhance, style=args.style,
                               brand_colors=brand_colors, reserve_corner=args.reserve_corner,
                               thinking=args.thinking)
-    print(f"deck: {result['path']}")
-    for p in result["image_paths"]:
-        print(p)
+    _print_deck(result)
     return 0
 
 
@@ -94,10 +107,7 @@ def _cmd_branded(args: argparse.Namespace) -> int:
                           out_pptx=args.out, out_dir=args.out_dir,
                           logo_position=args.position, logo_scale=args.scale,
                           thinking=args.thinking)
-    print(f"deck: {result['path']}")
-    print(f"brand_colors: {', '.join(result['brand_colors'])}")
-    for p in result["image_paths"]:
-        print(p)
+    _print_deck(result, colors=True)
     return 0
 
 
@@ -106,10 +116,7 @@ def _cmd_styled(args: argparse.Namespace) -> int:
     result = styled_deck(args.ref_image, args.prompts, aspect=args.aspect,
                          out_pptx=args.out, out_dir=args.out_dir,
                          thinking=args.thinking)
-    print(f"deck: {result['path']}")
-    print(f"brand_colors: {', '.join(result['brand_colors'])}")
-    for p in result["image_paths"]:
-        print(p)
+    _print_deck(result, colors=True)
     return 0
 
 

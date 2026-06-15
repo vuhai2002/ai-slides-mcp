@@ -49,6 +49,16 @@ set_pool_provider(
     remove=lambda token: get_pool().disable_token(token),
 )
 
+
+def pool_exhausted_reset() -> "tuple[bool, str | None]":
+    """(all accounts exhausted?, soonest reset ISO or None) for partial-deck handling.
+    Asks the pool directly - robust vs string-matching the engine's wrapped error."""
+    pool = get_pool()
+    if not pool.is_exhausted():
+        return False, None
+    resets = [r["restore_at"] for r in pool.status() if r.get("restore_at")]
+    return True, (min(resets) if resets else None)
+
 from services.protocol.conversation import (  # noqa: E402
     ConversationRequest,
     encode_images,
