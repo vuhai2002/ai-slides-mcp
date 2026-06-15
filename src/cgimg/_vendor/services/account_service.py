@@ -1,30 +1,15 @@
-"""Single-account drop-in replacing chatgpt2api's multi-account pool.
-Backed by a token provider wired at runtime via set_token_provider().
-Only implements the methods the vendored engine actually calls.
+"""Account shim replacing chatgpt2api's multi-account pool.
 
-Call sites covered (grep of src/cgimg/_vendor):
-  IMAGE PATH (must work — return value consumed):
-    - conversation.py:1246 get_available_access_token(plan_type=, source_type=, plan_types=)
-        -> returns the single token string. Accepts/ignores the pool-selection
-           kwargs since we have exactly one account.
-    - conversation.py:1257 / openai_backend_api.py:161,544,749 get_account(token)
-        -> code does `... or {}` then `.get("email"/"source_type"/"type")`,
-           so we return a dict with the token; missing keys resolve to "".
-    - openai_backend_api.py:750 _decode_jwt_payload(token)
-        -> code does `.get(...)` on the result, so it MUST be a dict. We decode
-           the JWT body best-effort; on any failure return {} (the engine guards
-           every access with .get / isinstance, so {} is safe).
-  TEXT PATH (not image-gen; only hit if text streaming is used):
-    - conversation.py:675 get_text_access_token() / :706 (attempted_tokens)
-        -> returns the single token string.
-    - conversation.py:696 mark_text_used(token) -> no-op (return unused).
-  SIDE-EFFECT ONLY (return value never consumed -> no-op None is safe):
-    - mark_image_result(token, bool)            conversation.py:1289..1392
-    - refresh_access_token(token, force=, event=) conversation.py:701,1402 /
-                                                   openai_backend_api refresh
-    - remove_invalid_token(token, reason)       conversation.py:705,1406
-  Any other attribute -> catch-all no-op (covers pool/registration helpers
-  that are off the image-generation path).
+LOCAL file - never re-vendored (listed in NOTICE). The vendored engine talks to
+``account_service`` for token selection, per-image result feedback, account
+lookup, and refresh. We back those calls with INJECTED callables wired at runtime
+from our code (``set_pool_provider`` from cgimg.engine, or the single-account
+``set_token_provider`` adapter), so this file imports NOTHING from cgimg and the
+vendored engine stays byte-identical to upstream.
+
+Every method the engine calls is defined EXPLICITLY (not just via the
+``__getattr__`` no-op): tests/test_vendor_contract.py fails loudly if a vendored
+call would silently fall through and return None.
 """
 from __future__ import annotations
 
@@ -33,42 +18,76 @@ import binascii
 import json
 from typing import Any, Callable, Optional
 
-_provider: Optional[Callable[[], str]] = None
-_refresher: Optional[Callable[[bool], str]] = None
+# Injected provider callables (wired at runtime; None until login is configured).
+_select: Optional[Callable[[], str]] = None               # -> access_token (may raise)
+_on_result: Optional[Callable[[str, bool], None]] = None  # (token, ok) -> None
+_account_lookup: Optional[Callable[[str], dict]] = None   # token -> account dict
+_text_token: Optional[Callable[[], str]] = None           # -> access_token (text path)
+_refresh: Optional[Callable[[str], str]] = None           # token -> (new) token
+_remove: Optional[Callable[[str], None]] = None           # token -> None
 
 
-def set_token_provider(get_token: Callable[[], str], refresh: Callable[[bool], str]) -> None:
-    global _provider, _refresher
-    _provider = get_token
-    _refresher = refresh
+def set_pool_provider(
+    *,
+    select: Callable[[], str],
+    on_result: Callable[[str, bool], None],
+    account_lookup: Callable[[str], dict],
+    text_token: Callable[[], str],
+    refresh: Callable[[str], str],
+    remove: Callable[[str], None],
+) -> None:
+    """Wire the multi-account pool's callables into the shim."""
+    global _select, _on_result, _account_lookup, _text_token, _refresh, _remove
+    _select = select
+    _on_result = on_result
+    _account_lookup = account_lookup
+    _text_token = text_token
+    _refresh = refresh
+    _remove = remove
 
 
-def _current_token() -> str:
-    if _provider is None:
+def set_token_provider(get_token: Callable[[], str],
+                       refresh: Callable[[bool], str]) -> None:
+    """Back-compat single-account adapter -> a one-token pool provider.
+
+    Kept so standalone callers (and tests/test_vendor_contract) that expect the
+    original hook keep working; a single logged-in account is just a 1-token pool.
+    """
+    set_pool_provider(
+        select=get_token,
+        on_result=lambda token, ok: None,
+        account_lookup=lambda token: {"access_token": token},
+        text_token=get_token,
+        refresh=lambda token: refresh(True),
+        remove=lambda token: None,
+    )
+
+
+def _require(fn: Optional[Callable[[], str]]) -> Callable[[], str]:
+    if fn is None:
         raise RuntimeError("cgimg: not logged in. Run `cgimg login` first.")
-    return _provider()
+    return fn
 
 
 class _AccountService:
     # --- image path: token selection ----------------------------------------
     def get_available_access_token(self, *args: Any, **kwargs: Any) -> str:
-        # Pool-selection kwargs (plan_type, source_type, plan_types) are ignored:
-        # cgimg has a single account, so there is nothing to select among.
-        return _current_token()
+        # Pool-selection kwargs (plan_type/source_type/plan_types) are ignored:
+        # cgimg's pool does its own quota-based selection.
+        return _require(_select)()
 
-    # --- text path: token selection ------------------------------------------
+    # --- text path: shares the active image account -------------------------
     def get_text_access_token(self, *args: Any, **kwargs: Any) -> str:
-        return _current_token()
+        return _require(_text_token)()
 
-    # --- account lookup (return value consumed via .get) ---------------------
+    # --- account lookup (engine reads .get("email"/...) defensively) --------
     def get_account(self, token: str) -> dict[str, Any]:
-        # Engine reads optional keys (email/source_type/type) defensively with
-        # .get(); a minimal dict is enough.
+        if _account_lookup is not None:
+            return _account_lookup(token) or {"access_token": token}
         return {"access_token": token}
 
     def _decode_jwt_payload(self, token: str) -> dict[str, Any]:
-        # Must return a dict — engine calls .get(...) on the result. Best-effort
-        # base64url decode of the JWT payload segment; {} on any failure.
+        # Must return a dict - engine calls .get(...) on the result.
         try:
             parts = token.split(".")
             if len(parts) < 2:
@@ -81,24 +100,30 @@ class _AccountService:
         except (ValueError, binascii.Error, json.JSONDecodeError):
             return {}
 
-    # --- token refresh (return value not consumed by engine) -----------------
+    # --- token refresh (engine compares old vs returned token) --------------
     def refresh_access_token(self, access_token: str, *, force: bool = False,
                              event: str = "refresh") -> str:
-        if _refresher is None:
-            raise RuntimeError("cgimg: no refresher configured")
-        return _refresher(force)
+        if _refresh is None:
+            return access_token
+        return _refresh(access_token) or access_token
 
-    # --- pure side-effect calls (return value never used) --------------------
-    def mark_image_result(self, *args: Any, **kwargs: Any) -> None:
+    # --- per-image result -> pool decrements quota on success ---------------
+    def mark_image_result(self, access_token: str, success: bool,
+                          *args: Any, **kwargs: Any) -> None:
+        if _on_result is not None:
+            _on_result(access_token, bool(success))
         return None
 
+    # --- pure side-effect calls --------------------------------------------
     def mark_text_used(self, *args: Any, **kwargs: Any) -> None:
         return None
 
     def remove_invalid_token(self, token: str, *args: Any, **kwargs: Any) -> None:
+        if _remove is not None:
+            _remove(token)
         return None
 
-    # --- catch-all for off-path pool/registration helpers --------------------
+    # --- catch-all for off-path pool/registration helpers -------------------
     def __getattr__(self, name: str):
         def _noop(*a: Any, **k: Any):
             return None

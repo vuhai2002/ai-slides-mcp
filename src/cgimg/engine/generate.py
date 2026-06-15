@@ -18,16 +18,35 @@ os.environ.setdefault("CHATGPT2API_AUTH_KEY", "cgimg-local")
 import cgimg._vendor_path  # noqa: F401  (side-effect: prepends _vendor to sys.path)
 
 from cgimg.auth import tokens
+from cgimg.auth.pool import AccountPool
 from cgimg.sizes import resolve_size
 from cgimg.types import Style, Thinking
 
-# Wire our token store into the vendored single-account shim BEFORE the engine
-# asks for a token. The shim's get_available_access_token() returns get_token().
-from services.account_service import set_token_provider  # noqa: E402
+# Build the multi-account pool and wire its callables into the vendored shim
+# BEFORE the engine asks for a token. A single logged-in account is just a
+# 1-element pool, so there is ONE code path. set_pool_provider takes plain
+# callables, so the vendored shim never imports cgimg. The pool is built lazily
+# on first use, so merely importing this module does not read/migrate auth.json.
+from services.account_service import set_pool_provider  # noqa: E402
 
-set_token_provider(
-    get_token=lambda: tokens.get_access_token(False),
-    refresh=lambda force: tokens.get_access_token(True),
+_pool: "AccountPool | None" = None
+
+
+def get_pool() -> AccountPool:
+    """Process-wide account pool (lazy: store is read on first real use)."""
+    global _pool
+    if _pool is None:
+        _pool = AccountPool(refresh_fn=tokens.refresh_for)
+    return _pool
+
+
+set_pool_provider(
+    select=lambda: get_pool().select(),
+    on_result=lambda token, ok: get_pool().on_result(token, ok),
+    account_lookup=lambda token: get_pool().account_for(token),
+    text_token=lambda: get_pool().current_token(),
+    refresh=lambda token: get_pool().refresh_token(token),
+    remove=lambda token: get_pool().disable_token(token),
 )
 
 from services.protocol.conversation import (  # noqa: E402
@@ -108,8 +127,11 @@ def generate_image(
     """
     size = resolve_size(aspect)
     if enhance:
+        # Fix the account for THIS slide so enhance (text) and the image share it
+        # (raises NoQuotaError up-front if every account is exhausted).
+        active = get_pool().current_token()
         prompt = enhance_prompt(prompt, style=style, brand_colors=brand_colors,
-                                reserve_corner=reserve_corner)
+                                reserve_corner=reserve_corner, access_token=active)
         print(f"[enhance] prompt expanded to {len(prompt)} chars", file=sys.stderr)
     elif style in _SLIDE_STYLES or brand_colors or reserve_corner:
         prompt = template_enhance(prompt, style=style, brand_colors=brand_colors,

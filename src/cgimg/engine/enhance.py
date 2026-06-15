@@ -73,7 +73,8 @@ def template_enhance(prompt: str, *, style: str = "auto",
 def enhance_prompt(prompt: str, *, text_model: str = "gpt-5",
                    brand_colors: list[str] | None = None,
                    reserve_corner: str | None = None,
-                   style: str = "auto") -> str:
+                   style: str = "auto",
+                   access_token: str | None = None) -> str:
     """Return an expanded prompt. Never raises — falls back to template on any error.
 
     style="slide" (clean editorial) or "fintech" (light-blue dashboard) apply a slide
@@ -92,10 +93,14 @@ def enhance_prompt(prompt: str, *, text_model: str = "gpt-5",
         return p
     try:
         # Local imports: keep the vendored engine import lazy + after env/sys.path setup.
-        from cgimg.auth import tokens
         from services.openai_backend_api import OpenAIBackendAPI
         from services.protocol.conversation import ConversationRequest, stream_text_deltas
-        backend = OpenAIBackendAPI(access_token=tokens.get_access_token())
+        token = access_token
+        if not token:
+            # No explicit token -> share the pool's active image account.
+            from services.account_service import account_service
+            token = account_service.get_text_access_token()
+        backend = OpenAIBackendAPI(access_token=token)
         system = {"slide": SLIDE_SYSTEM, "fintech": FINTECH_SYSTEM}.get(style, SYSTEM)
         if brand_clause:
             system = f"{system} {brand_clause}"

@@ -140,3 +140,34 @@ def test_current_token_selects_when_idle(seeded):
     assert p.current_token() == "tokA"   # triggers select
     assert p.current_token() == "tokA"   # cached active, no extra probe
     assert stub.calls["tokA"] == 1
+
+
+# ---- engine-adapter methods (phase 03) ----
+
+def test_account_for_returns_email(seeded):
+    seeded([{"user_id": "uA", "email": "a@x.com", "access_token": "tokA"}])
+    p = _pool(StubProbe({}))
+    assert p.account_for("tokA") == {"email": "a@x.com", "access_token": "tokA"}
+    assert p.account_for("ghost") == {"email": "", "access_token": "ghost"}
+
+
+def test_refresh_token_uses_refresh_fn(seeded):
+    seeded([{"user_id": "uA", "access_token": "tokA"}])
+    p = pool_mod.AccountPool(probe_fn=StubProbe({}),
+                             refresh_fn=lambda acc: "tokA-new", now_fn=lambda: NOW)
+    assert p.refresh_token("tokA") == "tokA-new"
+
+
+def test_refresh_token_unknown_or_no_fn_returns_same(seeded):
+    seeded([{"user_id": "uA", "access_token": "tokA"}])
+    assert _pool(StubProbe({})).refresh_token("tokA") == "tokA"   # no refresh_fn
+    assert _pool(StubProbe({})).refresh_token("ghost") == "ghost"  # unknown token
+
+
+def test_disable_token_benches_account(seeded):
+    seeded([{"user_id": "uA", "access_token": "tokA"}])
+    p = _pool(StubProbe({}))
+    p.disable_token("tokA")
+    acc = store.load_accounts()[0]
+    assert acc["restore_at"]
+    assert p._hint_alive(acc) is False

@@ -41,7 +41,6 @@ class AccountPool:
         self._accounts = store.load_accounts()
         self._active_token: Optional[str] = None
 
-    # ---- small queries ---------------------------------------------------
     def _find(self, token: str) -> Optional[dict[str, Any]]:
         for a in self._accounts:
             if str(a.get("access_token") or "") == token:
@@ -56,57 +55,41 @@ class AccountPool:
         """Cheap liveness from the persisted hint (no network)."""
         ra = acc.get("restore_at")
         if not ra:
-            return True  # never probed / no known exhaustion
+            return True
         epoch = reset_at.to_epoch(ra, self._now())
         return epoch is None or epoch <= self._now()
 
     def _stickable(self, acc: dict[str, Any]) -> bool:
-        """Reuse the active account only when its known quota is positive."""
         rem = self._remaining(acc)
         return isinstance(rem, int) and rem > 0 and self._hint_alive(acc)
 
-    # ---- selection -------------------------------------------------------
     def select(self) -> str:
-        """Return an access_token with image quota, probing to confirm.
-
-        Sticks to the active account while it has known quota; otherwise probes
-        the next candidate. Raises ``NoQuotaError`` when all are exhausted.
-        """
+        """Return a token with image quota (stick-until-exhausted); raise NoQuotaError when dry."""
         if self._active_token:
             acc = self._find(self._active_token)
             if acc is not None and self._stickable(acc):
                 return self._active_token
-
         if not self._accounts:
             raise NoQuotaError("Chưa đăng nhập account nào - chạy `cgimg login`.")
-
-        # Prefer accounts the hint says are alive; if none, probe all (hint may
-        # be stale - e.g. a fallback restore_at that has not really elapsed).
+        # Prefer hint-alive accounts; if none, probe all (a stale hint may lie).
         alive = [a for a in self._accounts if self._hint_alive(a)]
-        candidates = alive if alive else list(self._accounts)
-        for acc in candidates:
+        for acc in (alive or list(self._accounts)):
             res = self.probe(acc)
             if res["unknown"] or (res["remaining"] or 0) > 0:
                 self._active_token = str(acc.get("access_token") or "")
                 return self._active_token
-
         self._active_token = None
         soonest = self._soonest_restore()
         raise NoQuotaError(self._exhausted_message(soonest), soonest)
 
     def current_token(self) -> str:
-        """Active account's token, selecting one if needed (used by enhance)."""
+        """Active token, selecting one if needed (enhance shares this account)."""
         return self._active_token or self.select()
 
-    # ---- result feedback -------------------------------------------------
     def on_result(self, token: str, ok: bool) -> None:
-        """Record a generation result. Decrement local quota only on success.
-
-        A failure consumes no quota and triggers NO cooldown in v1: the engine
-        only passes a bool, so we cannot tell a quota error from a content-policy
-        refusal or a ban - benching a healthy account on a one-off reject would
-        be wrong. Real exhaustion is found by the proactive probe in ``select``.
-        """
+        """Decrement local quota on success only. No cooldown on failure - a bool
+        cannot tell a quota error from a content-policy refusal; real exhaustion
+        is found by the proactive probe in select()."""
         acc = self._find(token)
         if acc is None or not ok:
             return
@@ -115,25 +98,47 @@ class AccountPool:
             return  # unknown quota: cannot decrement; re-probed each select
         acc["last_quota"] = max(0, rem - 1)
         if acc["last_quota"] == 0:
-            # Approximate reset now; select()'s probe captures the real value
-            # when all accounts are dead and it must report the soonest reset.
             acc["restore_at"] = reset_at.to_iso(reset_at.fallback(self._now()))
             if self._active_token == token:
                 self._active_token = None
         store.save_accounts(self._accounts)
 
-    # ---- probe -----------------------------------------------------------
-    def probe(self, acc: dict[str, Any]) -> dict[str, Any]:
-        """Refresh-if-needed, call get_user_info, update + persist the account.
+    # Engine adapter - bound into the vendored shim via set_pool_provider.
+    def account_for(self, token: str) -> dict[str, Any]:
+        """Token -> minimal account dict so the engine can log the email."""
+        acc = self._find(token)
+        return {"email": (acc or {}).get("email") or "", "access_token": token}
 
-        Returns ``{remaining, unknown, restore_at_epoch}``. Backfills
-        email/user_id/type (fixes legacy accounts migrated with empty user_id).
+    def refresh_token(self, token: str) -> str:
+        """Best-effort refresh of that account's token; return new or same."""
+        acc = self._find(token)
+        if acc is None or not self._refresh_fn:
+            return token
+        try:
+            return self._refresh_fn(acc) or token
+        except Exception:
+            return token
+
+    def disable_token(self, token: str) -> None:
+        """Bench an account whose token went invalid so select() skips it."""
+        acc = self._find(token)
+        if acc is None:
+            return
+        acc["restore_at"] = reset_at.to_iso(reset_at.fallback(self._now()))
+        if self._active_token == token:
+            self._active_token = None
+        store.save_accounts(self._accounts)
+
+    def probe(self, acc: dict[str, Any]) -> dict[str, Any]:
+        """Probe get_user_info, update + persist the account, backfill identity.
+
+        Returns ``{remaining, unknown, restore_at_epoch}``.
         """
         if self._refresh_fn:
             try:
                 acc["access_token"] = self._refresh_fn(acc) or acc["access_token"]
             except Exception:
-                pass  # stale token still lets get_user_info report 401 cleanly
+                pass
         info = self._probe_fn(acc)
         unknown = bool(info.get("image_quota_unknown"))
         q = info.get("quota")
@@ -154,13 +159,9 @@ class AccountPool:
             else:
                 acc.pop("restore_at", None)
         store.save_accounts(self._accounts)
-        return {
-            "remaining": remaining,
-            "unknown": unknown,
-            "restore_at_epoch": reset_at.to_epoch(acc.get("restore_at"), now),
-        }
+        return {"remaining": remaining, "unknown": unknown,
+                "restore_at_epoch": reset_at.to_epoch(acc.get("restore_at"), now)}
 
-    # ---- reporting -------------------------------------------------------
     def is_exhausted(self) -> bool:
         """True when no account is (hint-)available - used by the deck layer."""
         return not self._accounts or not any(self._hint_alive(a) for a in self._accounts)
@@ -172,7 +173,7 @@ class AccountPool:
                 "email": a.get("email") or "",
                 "user_id": a.get("user_id") or "",
                 "type": a.get("type") or "free",
-                "remaining": self._remaining(a),  # None = unknown
+                "remaining": self._remaining(a),
                 "restore_at": a.get("restore_at"),
                 "alive": self._hint_alive(a),
             }
