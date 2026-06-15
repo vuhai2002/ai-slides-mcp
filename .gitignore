@@ -15,3 +15,6 @@ scratch/
 
 # Local planning/notes (CK workflow) - not part of the repo
 plans/
+
+# Local agent tooling state (memory/settings) - not part of the repo
+.claude/
