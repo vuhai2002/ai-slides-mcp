@@ -164,6 +164,20 @@ def test_refresh_token_unknown_or_no_fn_returns_same(seeded):
     assert _pool(StubProbe({})).refresh_token("ghost") == "ghost"  # unknown token
 
 
+def test_probe_records_quota_reset_for_alive_account(seeded):
+    seeded([{"user_id": "uA", "access_token": "tokA"}])
+    future = reset_at.to_iso(NOW + 3600)  # refills in 1h
+    p = _pool(StubProbe({"tokA": [_info(quota=5, restore_at=future)]}))
+    p.select()
+    acc = store.load_accounts()[0]
+    assert acc["last_quota"] == 5
+    assert acc["quota_reset_at"] == future   # refill time captured (display)
+    assert not acc.get("restore_at")         # but NOT benched - still alive
+    rows = p.status()
+    assert rows[0]["quota_reset_at"] == future
+    assert rows[0]["alive"] is True
+
+
 def test_disable_token_benches_account(seeded):
     seeded([{"user_id": "uA", "access_token": "tokA"}])
     p = _pool(StubProbe({}))

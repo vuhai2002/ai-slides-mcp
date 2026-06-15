@@ -32,9 +32,10 @@ ACCOUNT_FIELDS = (
     "refresh_token",
     "id_token",
     "saved_at",
-    "last_quota",     # hint: last-known remaining image quota
-    "restore_at",     # hint: when the quota resets
-    "probed_at",      # hint: when we last probed get_user_info
+    "last_quota",       # hint: last-known remaining image quota
+    "restore_at",       # internal bench marker: account unusable until this time
+    "probed_at",        # hint: when we last probed get_user_info
+    "quota_reset_at",   # display: backend image_gen refill time (informational)
 )
 
 

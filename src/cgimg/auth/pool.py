@@ -86,9 +86,8 @@ class AccountPool:
         return self._active_token or self.select()
 
     def on_result(self, token: str, ok: bool) -> None:
-        """Decrement local quota on success only. No cooldown on failure - a bool
-        cannot tell a quota error from a content-policy refusal; real exhaustion
-        is found by the proactive probe in select()."""
+        """Decrement local quota on success only; no cooldown on failure (a bool
+        can't tell quota-exhaustion from a content-policy refusal)."""
         acc = self._find(token)
         if acc is None or not ok:
             return
@@ -145,6 +144,9 @@ class AccountPool:
             if info.get(k):
                 acc[k] = info[k]
         acc["probed_at"] = now
+        # Informational backend refill time (display only; separate from restore_at).
+        be = reset_at.to_epoch(info.get("restore_at"), now)
+        acc["quota_reset_at"] = reset_at.to_iso(be) if be else None
         if unknown:
             acc["last_quota"] = None        # unknown counter -> try optimistically
             acc.pop("restore_at", None)
@@ -179,6 +181,7 @@ class AccountPool:
                 "type": a.get("type") or "free",
                 "remaining": self._remaining(a),
                 "restore_at": a.get("restore_at"),
+                "quota_reset_at": a.get("quota_reset_at"),
                 "alive": self._hint_alive(a),
             }
             for a in self._accounts
@@ -193,8 +196,5 @@ class AccountPool:
         return min(epochs) if epochs else None
 
     def _exhausted_message(self, soonest: Optional[float]) -> str:
-        n = len(self._accounts)
-        if soonest:
-            return (f"All {n} account(s) are out of image quota. "
-                    f"Soonest reset at {reset_at.to_iso(soonest)}.")
-        return f"All {n} account(s) are out of image quota."
+        base = f"All {len(self._accounts)} account(s) are out of image quota."
+        return f"{base} Soonest reset at {reset_at.to_iso(soonest)}." if soonest else base
