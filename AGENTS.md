@@ -107,6 +107,16 @@ Rules (important):
   live quota; `cgimg logout <sel>|--all` removes. A deck that outruns total quota
   returns a PARTIAL deck (`incomplete/generated/total/reset_at`). Rotating many
   accounts raises ban risk - use throwaway accounts.
+- Probing is NOT free and can get an account's SESSION REVOKED. `get_user_info`
+  (used by `cgimg accounts`, login, and pool selection) makes 3 backend calls;
+  hammering it across accounts in a short window trips OpenAI's abuse detection and
+  revokes the session - then `/backend-api/me` returns 401 even though the access
+  token's JWT `exp` is still in the future, AND the refresh_token also 401s (so
+  force-refresh cannot recover it). This is revocation, NOT a 429 rate-limit:
+  waiting does not help; `cgimg login` again restores the account (the tokens are
+  dead, not the account). Probe sparingly - don't loop `cgimg accounts`, and prefer
+  the cheap hint-based `login_status` over live probes. (Observed 2026-06: ~30 rapid
+  probe rounds on 2 throwaway free accounts revoked both; re-login fixed them.)
 - `scratch/` is gitignored - the update-vendor upstream checkout lives there.
 
 ## Pointers
