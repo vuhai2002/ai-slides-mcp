@@ -1,5 +1,6 @@
 """Single-account token store + refresh against OpenAI's OAuth endpoint."""
 from __future__ import annotations
+import base64
 import json
 import os
 import time
@@ -12,8 +13,11 @@ _CLIENT_ID = "app_2SKx67EdpoN0G6j64rFvigXD"
 _TOKEN_URL = "https://auth.openai.com/oauth/token"
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
        "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
-# Refresh if the stored access_token is older than this (seconds). 12h < 24h keepalive.
+# Legacy single-account gate (get_access_token): refresh if older than this.
 _REFRESH_AFTER = 12 * 3600
+# Pool gate (refresh_for): proactively refresh when the access token expires within
+# this window, by its JWT `exp` - mirrors upstream's _ACCESS_TOKEN_REFRESH_SKEW_SECONDS.
+_ACCESS_TOKEN_REFRESH_SKEW = 24 * 3600
 
 
 def _config_dir() -> Path:
@@ -79,28 +83,45 @@ def get_access_token(force: bool = False) -> str:
     return tok["access_token"]
 
 
+def _jwt_exp(token: str) -> int:
+    """Best-effort decode of a JWT access token's `exp` claim (0 if unknown)."""
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return int(json.loads(base64.urlsafe_b64decode(payload)).get("exp") or 0)
+    except Exception:
+        return 0
+
+
 def refresh_for(account: dict[str, Any], force: bool = False) -> str:
     """Refresh ONE pool account's access_token via its refresh_token.
 
-    Used by the multi-account pool. Returns the current token unchanged when it is
-    still fresh (and not forced) or there is no refresh_token; otherwise refreshes
-    and persists the new tokens through the v2 store (deduped by user_id).
-    force=True refreshes even when the token still looks fresh - used to recover a
-    token the backend just rejected as invalid.
+    Proactive like upstream: refreshes when the access token expires within
+    _ACCESS_TOKEN_REFRESH_SKEW (by its JWT `exp`) or when forced; otherwise returns
+    the token unchanged. On a refresh failure it stamps `refresh_error_at` (so the
+    pool backs that account off briefly) and re-raises. Persists via the v2 store.
     """
     from cgimg.auth import store  # local import avoids a store<->tokens cycle
 
     tok = str(account.get("access_token") or "")
-    fresh = (time.time() - (account.get("saved_at") or 0)) <= _REFRESH_AFTER
-    if (fresh and not force) or not account.get("refresh_token"):
+    if not account.get("refresh_token"):
         return tok
-    new = _refresh_request(account["refresh_token"])
-    account["access_token"] = new.get("access_token") or tok
+    exp = _jwt_exp(tok)
+    near_expiry = exp > 0 and (exp - time.time()) <= _ACCESS_TOKEN_REFRESH_SKEW
+    if not force and not near_expiry:
+        return tok
+    try:
+        new = _refresh_request(account["refresh_token"])
+    except Exception:
+        account["refresh_error_at"] = time.time()
+        store.upsert_account(account)
+        raise
+    account.update({"access_token": new.get("access_token") or tok,
+                    "saved_at": time.time(), "refresh_error_at": None})
     if new.get("refresh_token"):
         account["refresh_token"] = new["refresh_token"]
     if new.get("id_token"):
         account["id_token"] = new["id_token"]
-    account["saved_at"] = time.time()
     store.upsert_account(account)
     return account["access_token"]
 

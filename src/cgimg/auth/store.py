@@ -36,6 +36,7 @@ ACCOUNT_FIELDS = (
     "restore_at",       # internal bench marker: account unusable until this time
     "probed_at",        # hint: when we last probed get_user_info
     "quota_reset_at",   # display: backend image_gen refill time (informational)
+    "refresh_error_at", # backoff: when a token refresh last failed (skip briefly)
 )
 
 

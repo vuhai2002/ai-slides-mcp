@@ -267,3 +267,12 @@ def test_select_message_says_out_of_quota_when_exhausted(seeded):
                              now_fn=lambda: NOW)
     with pytest.raises(pool_mod.NoQuotaError, match="out of image quota"):
         p.select()
+
+
+def test_recent_refresh_error_backs_off_account(seeded):
+    seeded([{"user_id": "uA", "access_token": "tokA", "refresh_error_at": NOW - 10}])
+    p = _pool(StubProbe({}))
+    acc = p._accounts[0]
+    assert p._hint_alive(acc) is False        # 10s after a refresh error -> backed off
+    acc["refresh_error_at"] = NOW - 10 * 60   # 10 min ago -> past the backoff window
+    assert p._hint_alive(acc) is True

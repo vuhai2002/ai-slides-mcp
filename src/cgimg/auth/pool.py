@@ -1,9 +1,7 @@
 """Multi-account image-quota pool: select / probe / decrement / persist.
 
-Proactively probes ``get_user_info`` for remaining quota (the engine has no
-rotate-on-quota path, so it must only receive a live account), sticks to one
-account until it hits 0, then advances; persisted hints skip known-dead accounts
-without a probe (the probe stays source of truth). Sequential; tokens never logged.
+Proactively probes ``get_user_info`` for quota and sticks to one account until it
+hits 0, then advances; persisted hints skip known-dead accounts. Tokens never logged.
 """
 from __future__ import annotations
 
@@ -14,7 +12,10 @@ from cgimg.auth import reset_at, store
 from cgimg.auth.probe import default_probe, probe_account
 
 ProbeFn = Callable[[dict[str, Any]], dict[str, Any]]
-RefreshFn = Callable[[dict[str, Any]], str]
+RefreshFn = Callable[..., str]
+
+# Skip an account this long after a refresh error (upstream-style backoff).
+_REFRESH_ERROR_BACKOFF = 5 * 60
 
 
 class NoQuotaError(RuntimeError):
@@ -51,12 +52,13 @@ class AccountPool:
         return int(q) if isinstance(q, (int, float)) and not isinstance(q, bool) else None
 
     def _hint_alive(self, acc: dict[str, Any]) -> bool:
-        """Cheap liveness from the persisted hint (no network)."""
+        """Cheap liveness from persisted hints (no network)."""
+        now = self._now()
+        rea = acc.get("refresh_error_at")
+        if rea and now - rea < _REFRESH_ERROR_BACKOFF:
+            return False  # recent refresh error -> short backoff (upstream-style)
         ra = acc.get("restore_at")
-        if not ra:
-            return True
-        epoch = reset_at.to_epoch(ra, self._now())
-        return epoch is None or epoch <= self._now()
+        return not ra or (reset_at.to_epoch(ra, now) or now) <= now
 
     def _stickable(self, acc: dict[str, Any]) -> bool:
         rem = self._remaining(acc)
@@ -92,8 +94,7 @@ class AccountPool:
         return self._active_token or self.select()
 
     def on_result(self, token: str, ok: bool) -> None:
-        """Decrement local quota on success only; no cooldown on failure (a bool
-        can't tell quota-exhaustion from a content-policy refusal)."""
+        """Decrement local quota on success only (no cooldown on failure)."""
         acc = self._find(token)
         if acc is None or not ok:
             return
