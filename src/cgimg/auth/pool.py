@@ -72,17 +72,20 @@ class AccountPool:
             raise NoQuotaError("No accounts logged in - run `cgimg login`.")
         # Prefer hint-alive accounts; if none, probe all (a stale hint may lie).
         alive = [a for a in self._accounts if self._hint_alive(a)]
+        invalid = 0
         for acc in (alive or list(self._accounts)):
             try:
                 res = self.probe(acc)
             except Exception:
-                continue  # probe failed (invalid/expired token, flaky backend) -> next
+                invalid += 1  # probe failed: invalid/revoked token (or flaky backend)
+                continue
             if res["unknown"] or (res["remaining"] or 0) > 0:
                 self._active_token = str(acc.get("access_token") or "")
                 return self._active_token
         self._active_token = None
         soonest = self._soonest_restore()
-        raise NoQuotaError(self._exhausted_message(soonest), soonest)
+        msg = reset_at.exhaustion_message(len(self._accounts), soonest, invalid)
+        raise NoQuotaError(msg, soonest)
 
     def current_token(self) -> str:
         """Active token, selecting one if needed (enhance shares this account)."""
@@ -194,7 +197,3 @@ class AccountPool:
             if (e := reset_at.to_epoch(a.get("restore_at"), now)) is not None
         ]
         return min(epochs) if epochs else None
-
-    def _exhausted_message(self, soonest: Optional[float]) -> str:
-        base = f"All {len(self._accounts)} account(s) are out of image quota."
-        return f"{base} Soonest reset at {reset_at.to_iso(soonest)}." if soonest else base

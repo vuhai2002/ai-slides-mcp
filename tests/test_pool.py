@@ -242,3 +242,28 @@ def test_status_marks_probe_failed(seeded):
     p = pool_mod.AccountPool(probe_fn=boom, now_fn=lambda: NOW)
     assert p.status(probe=True)[0]["probe_failed"] is True
     assert p.status()[0]["probe_failed"] is False   # hint-only never flags failure
+
+
+def test_select_message_flags_invalid_tokens(seeded):
+    # All probes fail (revoked tokens) -> message says re-login, NOT "out of quota".
+    seeded([
+        {"user_id": "uA", "access_token": "tokA"},
+        {"user_id": "uB", "access_token": "tokB"},
+    ])
+
+    def all_invalid(acc):
+        raise RuntimeError("token invalidated")
+
+    p = pool_mod.AccountPool(probe_fn=all_invalid, now_fn=lambda: NOW)
+    with pytest.raises(pool_mod.NoQuotaError, match="invalid tokens"):
+        p.select()
+
+
+def test_select_message_says_out_of_quota_when_exhausted(seeded):
+    # Probe succeeds but quota is 0 -> message is "out of image quota" (wait for reset).
+    future = reset_at.to_iso(NOW + 3600)
+    seeded([{"user_id": "uA", "access_token": "tokA"}])
+    p = pool_mod.AccountPool(probe_fn=lambda acc: _info(quota=0, restore_at=future),
+                             now_fn=lambda: NOW)
+    with pytest.raises(pool_mod.NoQuotaError, match="out of image quota"):
+        p.select()

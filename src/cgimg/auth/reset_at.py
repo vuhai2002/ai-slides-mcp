@@ -71,3 +71,16 @@ def to_iso(epoch: float) -> str:
 def fallback(now: float, hours: float = 24.0) -> float:
     """Default reset epoch when upstream gave us nothing parseable."""
     return now + hours * 3600.0
+
+
+def exhaustion_message(n: int, soonest: Optional[float], invalid: int = 0) -> str:
+    """All-accounts-failed error text, distinguishing the two causes: out of image
+    quota (wait for the reset) vs invalid/revoked tokens (re-login)."""
+    if invalid and not soonest:
+        return f"All {n} account(s) have invalid tokens - run `cgimg login` again."
+    msg = f"All {n} account(s) are out of image quota."
+    if soonest:
+        msg += f" Soonest reset at {to_iso(soonest)}."
+    if invalid:
+        msg += f" ({invalid} had invalid tokens - try `cgimg login`.)"
+    return msg
