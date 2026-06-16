@@ -104,6 +104,7 @@ def _account_from_tokens(toks: dict[str, str]) -> dict:
         "refresh_token": toks["refresh_token"],
         "id_token": toks.get("id_token", ""),
         "user_id": "",
+        "refresh_error_at": None,  # fresh login clears any stale refresh-error backoff
     }
     try:
         from services.openai_backend_api import OpenAIBackendAPI

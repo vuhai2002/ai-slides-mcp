@@ -35,3 +35,21 @@ def test_cli_login_step1_prints_url(capsys, tmp_path, monkeypatch):
     assert rc == 0
     assert "auth.openai.com/api/accounts/authorize" in out
     assert (tmp_path / "login_pending.json").exists()
+
+
+def test_account_from_tokens_clears_refresh_error_at(monkeypatch):
+    # A re-login must clear any stale refresh-error backoff so the account revives.
+    import services.openai_backend_api as backend
+
+    class FakeBackend:
+        def __init__(self, access_token):
+            pass
+
+        def get_user_info(self):
+            return {"user_id": "u", "email": "e@x.com", "type": "free", "quota": 5}
+
+    monkeypatch.setattr(backend, "OpenAIBackendAPI", FakeBackend)
+    acc = oauth_login._account_from_tokens(
+        {"access_token": "a", "refresh_token": "r", "id_token": "i"})
+    assert acc["refresh_error_at"] is None
+    assert acc["user_id"] == "u"
