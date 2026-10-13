@@ -75,9 +75,11 @@ Layout:
 
 Rules (important):
 - **NEVER hand-edit a VERBATIM `_vendor/` file.** To change vendored behavior, patch
-  it from our code. Reference pattern: `engine/image_thinking.py` monkey-patches the
-  image-prepare payload at runtime so `_vendor/services/openai_backend_api.py` stays
-  byte-identical (and thus auto-updatable).
+  it from our code. Reference pattern: `engine/image_thinking.py` wraps
+  `OpenAIBackendAPI._image_model_settings` at runtime (per-request `thinking_effort`
+  on both image requests) so `_vendor/services/openai_backend_api.py` stays
+  byte-identical (and thus auto-updatable); `tests/test_image_thinking.py` guards
+  the hook across vendor updates.
 - `VENDOR_REV` pins the synced upstream commit. Re-sync with
   `scripts/update-vendor.sh` (or `update-vendor.ps1`): it overwrites VERBATIM files,
   leaves shims untouched, warns if upstream changed a shimmed file, and re-pins SHA.

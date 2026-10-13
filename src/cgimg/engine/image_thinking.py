@@ -1,29 +1,26 @@
-"""Inject an optional `thinking_effort` into the gpt-image-2 prepare payload.
+"""Per-request `thinking_effort` for image generation.
 
-The ChatGPT web UI has an "Intelligence" selector (Instant / Medium / High) that
-makes the image model reason more before drawing. More reasoning improves fine
-detail and especially TEXT rendering (e.g. Vietnamese diacritics), at the cost of
-speed. The vendored backend's image path does NOT send this field (only the
-editable PPT/PSD path does), so we add it WITHOUT editing the vendored file:
+The ChatGPT web UI has an "Intelligence" selector that makes the image model
+reason more before drawing. More reasoning improves fine detail and especially
+TEXT rendering (e.g. Vietnamese diacritics), at the cost of speed.
 
-A class-level wrapper around `OpenAIBackendAPI._prepare_image_conversation`
-temporarily intercepts the outgoing image-prepare POST and merges `thinking_effort`
-into the picture_v2 payload. Keeping the vendored file byte-identical means
-scripts/update-vendor.sh can still re-pull it verbatim. The wrapper depends only
-on a stable identifier (the picture_v2 prepare payload shape), not on the method
-body, so it survives upstream refactors.
+The vendored backend picks `(upstream_model, thinking_effort)` for an image
+request in ONE place, `OpenAIBackendAPI._image_model_settings`, and puts that
+effort on BOTH image requests (the `/f/conversation/prepare` POST and the main
+`/f/conversation` POST). Upstream only reads it from a global config value; we
+wrap that method so a per-call level (set_thinking) wins, WITHOUT editing the
+vendored file - scripts/update-vendor.sh can still re-pull it verbatim.
+tests/test_image_thinking.py fails loudly if upstream drops or bypasses the hook.
 
-Wire values were reverse-engineered against the live image-prepare endpoint:
-the accepted enum is "standard" < "extended" < "max" (anything else -> HTTP 422
-"Invalid conversation body"). These correspond to the web UI "Intelligence" menu
-(roughly Instant/Medium/High). "auto"/None sends no field -> ChatGPT's default.
+Valid wire values (reverse-engineered; anything else -> HTTP 422 "Invalid
+conversation body"): "standard" < "extended" < "max", roughly the web UI's
+Instant/Medium/High. "auto"/None leaves upstream's own default (no field).
 """
 from __future__ import annotations
 
 import cgimg._vendor_path  # noqa: F401  (side effect: puts _vendor on sys.path)
 from services.openai_backend_api import OpenAIBackendAPI
 
-# Reverse-engineered valid enum for the image path. "auto"/None => send nothing.
 _VALID = {"standard", "extended", "max"}
 _level: str | None = None
 
@@ -42,7 +39,7 @@ def set_thinking(level: str | None) -> None:
         return
     if norm not in _VALID:
         raise ValueError(
-            f"unknown thinking level {level!r}; use auto|instant|medium|high"
+            f"unknown thinking level {level!r}; use auto|standard|extended|max"
         )
     _level = norm
 
@@ -51,40 +48,17 @@ def current() -> str | None:
     return _level
 
 
-def _is_image_prepare_payload(body: object) -> bool:
-    return (
-        isinstance(body, dict)
-        and body.get("system_hints") == ["picture_v2"]
-        and "partial_query" in body
-    )
+_orig_settings = OpenAIBackendAPI._image_model_settings
 
 
-_orig_prepare = OpenAIBackendAPI._prepare_image_conversation
-
-
-def _prepare_image_conversation(self, prompt, requirements, model):
+def _image_model_settings(self, model):
+    upstream_model, effort = _orig_settings(self, model)
     if _level is None:
-        return _orig_prepare(self, prompt, requirements, model)
-
-    real_post = self.session.post
-
-    def _post(url, *args, **kwargs):
-        body = kwargs.get("json")
-        if _is_image_prepare_payload(body):
-            body["thinking_effort"] = _level
-        return real_post(url, *args, **kwargs)
-
-    self.session.post = _post
-    try:
-        return _orig_prepare(self, prompt, requirements, model)
-    finally:
-        try:
-            del self.session.post  # drop the instance override -> class method
-        except AttributeError:
-            self.session.post = real_post
+        return upstream_model, effort
+    return upstream_model, _level
 
 
 # Install once (idempotent across re-imports).
-if not getattr(OpenAIBackendAPI._prepare_image_conversation, "_cgimg_thinking", False):
-    _prepare_image_conversation._cgimg_thinking = True
-    OpenAIBackendAPI._prepare_image_conversation = _prepare_image_conversation
+if not getattr(OpenAIBackendAPI._image_model_settings, "_cgimg_thinking", False):
+    _image_model_settings._cgimg_thinking = True
+    OpenAIBackendAPI._image_model_settings = _image_model_settings
