@@ -15,7 +15,7 @@ import sys
 
 from cgimg.engine.generate import generate_image, pool_exhausted_reset
 from cgimg.ppt.builder import build_pptx
-from cgimg.types import Style, Thinking
+from cgimg.types import DECK_THINKING, Style, Thinking
 
 
 def finish_deck(images: list[str], out_pptx: str, aspect: str, total: int,
@@ -50,7 +50,7 @@ def build_slide_deck(
     style: Style = "slide",
     brand_colors: list[str] | None = None,
     reserve_corner: str | None = None,
-    thinking: Thinking = "auto",
+    thinking: Thinking = DECK_THINKING,
     name_prefix: str = "s",
 ) -> dict:
     """Generate one image per prompt, name them `<prefix>NN.png`, assemble a PPTX.

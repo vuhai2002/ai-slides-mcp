@@ -17,13 +17,13 @@ from cgimg.branding.composite import overlay_logo
 from cgimg.engine.decks import finish_deck
 from cgimg.engine.enhance import enhance_prompt
 from cgimg.engine.generate import generate_image, pool_exhausted_reset
-from cgimg.types import Thinking
+from cgimg.types import DECK_THINKING, Thinking
 
 
 def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
                  out_pptx: str = "deck.pptx", out_dir: str = "out",
                  logo_position: str = "top-left", logo_scale: float = 0.15,
-                 thinking: Thinking = "auto") -> dict:
+                 thinking: Thinking = DECK_THINKING) -> dict:
     """Build a branded deck and return its path, slide images, brand colors, and
     partial-deck status (incomplete/generated/total/reset_at).
 
@@ -64,7 +64,7 @@ def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
 
 def styled_deck(ref_image: str, prompts: list[str], aspect: str = "16:9",
                 out_pptx: str = "deck.pptx", out_dir: str = "out",
-                thinking: Thinking = "auto") -> dict:
+                thinking: Thinking = DECK_THINKING) -> dict:
     """Generate a slide deck whose design MATCHES a reference image (style + colors).
 
     - extract brand colors from ref_image

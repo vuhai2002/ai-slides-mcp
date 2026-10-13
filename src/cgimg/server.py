@@ -2,7 +2,7 @@
 from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
-from cgimg.types import RefMode, Style, Thinking
+from cgimg.types import DECK_THINKING, RefMode, Style, Thinking
 
 mcp = FastMCP("ai-slides")
 
@@ -77,7 +77,7 @@ def build_pptx(image_paths: list[str], out_path: str = "deck.pptx",
 def generate_slide_deck(prompts: list[str], aspect: str = "16:9",
                         out_pptx: str = "deck.pptx", out_dir: str = "out",
                         enhance: bool = True, style: Style = "slide",
-                        thinking: Thinking = "auto",
+                        thinking: Thinking = DECK_THINKING,
                         brand_colors: list[str] | None = None,
                         reserve_corner: str | None = None) -> dict:
     """Generate one image per prompt then assemble them into a PPTX deck.
@@ -88,8 +88,8 @@ def generate_slide_deck(prompts: list[str], aspect: str = "16:9",
     enhancer designs it. Set enhance=False to send prompts verbatim (a slide style
     or brand_colors/reserve_corner still apply via the offline template).
 
-    thinking ('auto'/'standard'/'extended'/'max') sets image reasoning effort;
-    higher renders Vietnamese text more reliably but is slower. brand_colors +
+    thinking ('auto'/'standard'/'extended'/'max', default 'max') sets image
+    reasoning effort; 'max' renders Vietnamese text most reliably. brand_colors +
     reserve_corner work as in generate_image. Slides are named s01.png, s02.png...
 
     If every logged-in account runs out of image quota mid-deck, generation stops
@@ -105,12 +105,13 @@ def generate_slide_deck(prompts: list[str], aspect: str = "16:9",
 def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
                  out_pptx: str = "deck.pptx", out_dir: str = "out",
                  logo_position: str = "top-left", logo_scale: float = 0.15,
-                 thinking: Thinking = "auto") -> dict:
+                 thinking: Thinking = DECK_THINKING) -> dict:
     """Build a branded slide deck: auto-detect brand colors from the logo, generate
     slides in those colors, composite the original logo onto each slide, assemble PPTX.
 
-    thinking ('auto'/'standard'/'extended'/'max') sets image reasoning effort;
-    higher renders Vietnamese text more reliably but is slower."""
+    thinking ('auto'/'standard'/'extended'/'max', default 'max') sets image
+    reasoning effort; 'max' renders Vietnamese text most reliably. Pass 'auto'
+    only when speed matters more than text accuracy."""
     from cgimg.branding.deck import branded_deck as _bd
     return _bd(logo_path, prompts, aspect=aspect, out_pptx=out_pptx, out_dir=out_dir,
                logo_position=logo_position, logo_scale=logo_scale, thinking=thinking)
@@ -119,11 +120,12 @@ def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
 @mcp.tool()
 def styled_deck(ref_image: str, prompts: list[str], aspect: str = "16:9",
                 out_pptx: str = "deck.pptx", out_dir: str = "out",
-                thinking: Thinking = "auto") -> dict:
+                thinking: Thinking = DECK_THINKING) -> dict:
     """Generate a deck matching a reference design image's style and colors (content not copied).
 
-    thinking ('auto'/'standard'/'extended'/'max') sets image reasoning effort;
-    higher renders Vietnamese text more reliably but is slower."""
+    thinking ('auto'/'standard'/'extended'/'max', default 'max') sets image
+    reasoning effort; 'max' renders Vietnamese text most reliably. Pass 'auto'
+    only when speed matters more than text accuracy."""
     from cgimg.branding.deck import styled_deck as _sd
     return _sd(ref_image, prompts, aspect=aspect, out_pptx=out_pptx, out_dir=out_dir,
                thinking=thinking)

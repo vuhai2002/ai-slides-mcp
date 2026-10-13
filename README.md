@@ -111,9 +111,9 @@ Six tools are exposed by the server (`src/cgimg/server.py`):
 | `login_status` | — | `{authed, accounts, ready_count}` | List logged-in accounts (cheap, hint-based; use the CLI `cgimg accounts` for live quota). |
 | `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None`, `ref_image=None`, `ref_mode="style"` | `{paths}` | Generate `n` image(s) from a prompt, optionally with a reference image (see below). Returns saved PNG paths. |
 | `build_pptx` | `image_paths`, `out_path="deck.pptx"`, `aspect="16:9"` | `{path}` | Assemble existing images into a full-bleed PPTX. |
-| `generate_slide_deck` | `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `enhance=True`, `style="slide"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None` | `{path, image_paths, incomplete, generated, total, reset_at}` | Generate one image per prompt (one slide each, named `s01.png`...), then assemble into a PPTX. Returns a partial deck (`incomplete=true`) if accounts run out of quota. |
-| `branded_deck` | `logo_path`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `logo_position="top-left"`, `logo_scale=0.15`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Auto-detects brand colors from the logo, generates slides in those colors, and composites the **original logo** onto each slide. |
-| `styled_deck` | `ref_image`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Matches a **reference image's** design style + colors (does **not** copy its text/content). |
+| `generate_slide_deck` | `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `enhance=True`, `style="slide"`, `thinking="max"`, `brand_colors=None`, `reserve_corner=None` | `{path, image_paths, incomplete, generated, total, reset_at}` | Generate one image per prompt (one slide each, named `s01.png`...), then assemble into a PPTX. Returns a partial deck (`incomplete=true`) if accounts run out of quota. |
+| `branded_deck` | `logo_path`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `logo_position="top-left"`, `logo_scale=0.15`, `thinking="max"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Auto-detects brand colors from the logo, generates slides in those colors, and composites the **original logo** onto each slide. |
+| `styled_deck` | `ref_image`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `thinking="max"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Matches a **reference image's** design style + colors (does **not** copy its text/content). |
 
 For `generate_slide_deck` / `branded_deck` / `styled_deck`, each prompt is the **content of one slide** — pass raw slide content and the enhancer designs it.
 
@@ -152,12 +152,12 @@ ChatGPT's web UI has an "Intelligence" selector that makes the image model reaso
 
 | `thinking` | Effect |
 |------------|--------|
-| `auto` (default) | Sends no preference — ChatGPT's own default (fast). |
+| `auto` (default for `generate_image` / `gen`) | Sends no preference — ChatGPT's own default (fast). |
 | `standard` | Light reasoning. |
 | `extended` | More reasoning. |
-| `max` | Most reasoning — best for **rendered text** (e.g. Vietnamese diacritics), slowest. |
+| `max` (default for the deck tools and CLI `deck` / `branded` / `styled`) | Most reasoning - best for **rendered text** (e.g. Vietnamese diacritics). |
 
-Higher effort noticeably improves text fidelity inside the image. If generated slides garble Vietnamese diacritics at the default, try `--thinking max` (CLI) or `thinking="max"` (MCP). Values are passed to ChatGPT's image backend as `thinking_effort`; anything outside the set above is rejected by the backend.
+Higher effort noticeably improves text fidelity inside the image. Decks default to `max` so slide text (often Vietnamese) renders correctly; pass `thinking="auto"` / `--thinking auto` when speed matters more. For a single image, add `--thinking max` (CLI) or `thinking="max"` (MCP). Values are passed to ChatGPT's image backend as `thinking_effort`; anything outside the set above is rejected by the backend.
 
 ## CLI usage
 

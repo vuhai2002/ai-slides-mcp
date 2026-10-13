@@ -6,14 +6,14 @@ from typing import get_args
 
 from cgimg.cli_accounts import _cmd_accounts, _cmd_logout
 from cgimg.console import force_utf8
-from cgimg.types import RefMode, Style, Thinking
+from cgimg.types import DECK_THINKING, RefMode, Style, Thinking
 
 
-def _add_thinking_arg(p: argparse.ArgumentParser) -> None:
+def _add_thinking_arg(p: argparse.ArgumentParser, default: str = "auto") -> None:
     """Shared --thinking option for image-generating subcommands."""
-    p.add_argument("--thinking", default="auto", choices=list(get_args(Thinking)),
-                   help="image reasoning effort (auto<standard<extended<max); higher "
-                        "= better rendered text (e.g. VN diacritics) but slower")
+    p.add_argument("--thinking", default=default, choices=list(get_args(Thinking)),
+                   help=f"image reasoning effort (auto<standard<extended<max, default "
+                        f"{default}); higher = better rendered text (e.g. VN diacritics)")
 
 
 def _add_brand_args(p: argparse.ArgumentParser) -> None:
@@ -175,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     br.add_argument("--aspect", default="16:9")
     br.add_argument("--position", default="top-left")
     br.add_argument("--scale", type=float, default=0.15)
-    _add_thinking_arg(br)
+    _add_thinking_arg(br, DECK_THINKING)
     br.set_defaults(func=_cmd_branded)
 
     st = sub.add_parser("styled")
@@ -184,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--out", default="deck.pptx")
     st.add_argument("--out-dir", dest="out_dir", default="out")
     st.add_argument("--aspect", default="16:9")
-    _add_thinking_arg(st)
+    _add_thinking_arg(st, DECK_THINKING)
     st.set_defaults(func=_cmd_styled)
 
     dk = sub.add_parser("deck", help="generate a multi-slide PPTX (one image per prompt)")
@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     dk.add_argument("--no-enhance", dest="enhance", action="store_false",
                     help="skip the LLM enhance; a --style still applies via offline template")
     dk.add_argument("--style", default="slide", choices=list(get_args(Style)))
-    _add_thinking_arg(dk)
+    _add_thinking_arg(dk, DECK_THINKING)
     _add_brand_args(dk)
     dk.set_defaults(func=_cmd_deck, enhance=True)
 

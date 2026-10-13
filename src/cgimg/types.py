@@ -14,6 +14,12 @@ from typing import Literal
 # "auto" sends no field (ChatGPT default). standard < extended < max.
 Thinking = Literal["auto", "standard", "extended", "max"]
 
+# Default effort for the deck tools (generate_slide_deck / branded_deck /
+# styled_deck and CLI deck/branded/styled). Slides are text-heavy and often
+# Vietnamese; "max" renders diacritics most reliably. Single-image generation
+# (generate_image / CLI gen) keeps "auto".
+DECK_THINKING: Thinking = "max"
+
 # Slide design treatment applied by the prompt enhancer.
 Style = Literal["auto", "slide", "fintech"]
 
