@@ -78,7 +78,9 @@ Write-Host $config -ForegroundColor Gray
 $addCC = Read-Host "`nAuto-register with Claude Code via 'claude mcp add'? (y/N)"
 if ($addCC -match '^[Yy]') {
     try {
-        claude mcp add ai-slides -- uv run cgimg-mcp
+        # -s user: available in every folder; --directory: uv must run inside the repo.
+        # '--' is quoted because PowerShell strips a bare -- before native commands.
+        claude mcp add ai-slides -s user '--' uv run --directory "$repo" cgimg-mcp
         Ok "Registered with Claude Code. Restart Claude Code to load it."
     } catch {
         Warn "Could not run 'claude mcp add'. Add the JSON above to your MCP config manually."

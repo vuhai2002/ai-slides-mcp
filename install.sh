@@ -72,7 +72,8 @@ MCP config for Claude Code / Codex / Antigravity:
 EOF
 read -r -p "Auto-register with Claude Code via 'claude mcp add'? (y/N) " addcc
 if [[ "$addcc" =~ ^[Yy] ]]; then
-  if claude mcp add ai-slides -- uv run cgimg-mcp; then
+  # -s user: available in every folder; --directory: uv must run inside the repo.
+  if claude mcp add ai-slides -s user -- uv run --directory "$repo" cgimg-mcp; then
     ok "Registered with Claude Code. Restart Claude Code to load it."
   else
     warn "Could not run 'claude mcp add'. Add the JSON above to your MCP config manually."

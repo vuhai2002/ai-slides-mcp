@@ -14,7 +14,7 @@ import time
 import cgimg._vendor_path  # noqa: F401  (side-effect: _vendor on sys.path + auth-key env)
 
 from cgimg.sizes import resolve_size
-from cgimg.types import Style, Thinking
+from cgimg.types import RefMode, Style, Thinking
 
 # Importing this wires the multi-account pool into the vendored shim AND forces
 # sequential generation (side effects on import); it also exposes the pool
@@ -30,6 +30,7 @@ from services.protocol.conversation import (  # noqa: E402
 
 from cgimg.engine.enhance import enhance_prompt, template_enhance  # noqa: E402
 from cgimg.engine import image_thinking  # noqa: E402  (installs the thinking-effort patch)
+from cgimg.engine.ref_modes import is_render_mode, ref_suffix  # noqa: E402
 
 _SLIDE_STYLES = ("slide", "fintech")
 
@@ -72,6 +73,7 @@ def generate_image(
     enhance: bool = True,
     style: Style = "auto",
     ref_image: str | None = None,
+    ref_mode: RefMode = "style",
     thinking: Thinking = "auto",
     brand_colors: list[str] | None = None,
     reserve_corner: str | None = None,
@@ -83,9 +85,15 @@ def generate_image(
     presentation-slide aesthetic (light, restrained, one hero, short labels) —
     best for slide content.
 
-    When ref_image is a path, the engine runs the image-EDIT path: the model SEES
-    the reference and matches its DESIGN STYLE only (palette, layout, typography,
-    mood) — its text/content is NOT copied.
+    When ref_image is a path, the engine attaches it so the model SEES it:
+      ref_mode="style" (default) - match the reference's DESIGN STYLE only
+        (palette, layout, typography, mood); its text/content is NOT copied.
+      ref_mode="logo" (alias "asset") - the reference IS a real logo/brand asset;
+        the model places it into the image exactly as given (no redraw/invent).
+      ref_mode="render" (aliases "restyle", "architecture") - the reference is a
+        3D render of a building; keep massing, openings and camera, change only
+        materials, lighting and landscaping. All prompt rewriting (enhance and the
+        offline slide template) is skipped, since it would turn it into a slide.
 
     thinking selects reasoning effort before drawing: "auto" (default = ChatGPT's
     own default) or "standard"/"extended"/"max" (increasing). Higher effort
@@ -99,7 +107,10 @@ def generate_image(
     being silently ignored.
     """
     size = resolve_size(aspect)
-    if enhance:
+    render = bool(ref_image) and is_render_mode(ref_mode)
+    if render:
+        print("[render] restyling a building render; prompt sent verbatim", file=sys.stderr)
+    elif enhance:
         # Fix the account for THIS slide so enhance (text) and the image share it
         # (raises NoQuotaError up-front if every account is exhausted).
         active = get_pool().current_token()
@@ -113,18 +124,7 @@ def generate_image(
 
     encoded: list[str] | None = None
     if ref_image:
-        # Strong STYLE-ONLY instruction so the model borrows the look, not the words.
-        prompt = (
-            prompt
-            + " QUAN TRỌNG: Ảnh đính kèm CHỈ là tham chiếu PHONG CÁCH THIẾT KẾ "
-            "(bảng màu, bố cục, kiểu chữ, không khí, hoạ tiết trang trí). TUYỆT ĐỐI "
-            "KHÔNG sao chép chữ, tiêu đề, hay nội dung cụ thể trong ảnh tham chiếu. "
-            "Hãy tạo slide MỚI với nội dung đã cho ở trên, mang phong cách giống ảnh "
-            "tham chiếu. (IMPORTANT: the attached image is a DESIGN-STYLE reference "
-            "ONLY — palette, layout, typography, mood, decorative motifs. Do NOT copy "
-            "any text, titles, or specific content from it; create a NEW slide with "
-            "the content above, styled like the reference.)"
-        )
+        prompt = prompt + ref_suffix(ref_mode)
         ext = os.path.splitext(ref_image)[1].lower()
         mime = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
         with open(ref_image, "rb") as f:

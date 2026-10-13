@@ -2,7 +2,7 @@
 from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
-from cgimg.types import Style, Thinking
+from cgimg.types import RefMode, Style, Thinking
 
 mcp = FastMCP("ai-slides")
 
@@ -27,7 +27,9 @@ def generate_image(prompt: str, aspect: str = "16:9", n: int = 1,
                    out_dir: str = "out", enhance: bool = True,
                    style: Style = "auto", thinking: Thinking = "auto",
                    brand_colors: list[str] | None = None,
-                   reserve_corner: str | None = None) -> dict:
+                   reserve_corner: str | None = None,
+                   ref_image: str | None = None,
+                   ref_mode: RefMode = "style") -> dict:
     """Generate image(s) from a text prompt at the given aspect ratio
     (16:9, 1:1, 3:4, 4:3, 9:16, or WxH). Returns saved PNG file paths.
 
@@ -44,11 +46,23 @@ def generate_image(prompt: str, aspect: str = "16:9", n: int = 1,
 
     brand_colors (list of hex like ['#10B981']) forces a palette; reserve_corner
     (e.g. 'top-left') keeps a corner clear for a logo and bans model-drawn
-    logos/text. With enhance=False these still apply via the offline template."""
+    logos/text. With enhance=False these still apply via the offline template.
+
+    ref_image: path to a reference image the model SEES while drawing (like
+    dragging an image into ChatGPT). ref_mode='style' (default) borrows only the
+    reference's look (palette/layout/typography), not its content.
+    ref_mode='logo' (alias 'asset') places that real logo/brand asset into the
+    image EXACTLY as given (no redraw/invent) - use this for logos.
+    ref_mode='render' (aliases 'restyle', 'architecture') restyles a 3D render of
+    a building: massing, floors, openings, roof and camera stay the same, only
+    materials, lighting and landscaping change; enhance/style/brand_colors are
+    skipped and the prompt is sent verbatim. Pass absolute paths for ref_image
+    and out_dir."""
     from cgimg.engine.generate import generate_image as _gen
     return {"paths": _gen(prompt, aspect=aspect, n=n, out_dir=out_dir,
                           enhance=enhance, style=style, thinking=thinking,
-                          brand_colors=brand_colors, reserve_corner=reserve_corner)}
+                          brand_colors=brand_colors, reserve_corner=reserve_corner,
+                          ref_image=ref_image, ref_mode=ref_mode)}
 
 
 @mcp.tool()

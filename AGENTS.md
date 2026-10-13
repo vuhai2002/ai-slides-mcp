@@ -26,7 +26,7 @@ for agents that **develop** the repo, and as a human-readable mirror of the tool
 | Tool | Key params (defaults) | Returns |
 |------|-----------------------|---------|
 | `login_status` | - | `{authed, accounts, ready_count}` |
-| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"` | `{paths}` |
+| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors`, `reserve_corner`, `ref_image=None`, `ref_mode="style"` | `{paths}` |
 | `build_pptx` | `image_paths`, `out_path="deck.pptx"`, `aspect="16:9"` | `{path}` |
 | `generate_slide_deck` | `prompts`, `aspect`, `out_pptx`, `out_dir`, `enhance=True`, `style="slide"`, `thinking="auto"` | `{path, image_paths, incomplete, generated, total, reset_at}` |
 | `branded_deck` | `logo_path`, `prompts`, ..., `logo_position`, `logo_scale`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` |
@@ -43,6 +43,9 @@ PARTIAL deck when every account is out of quota (`incomplete=True` + `generated`
 ### Parameter value sets (enforced as schema enums - keep in `src/cgimg/types.py`)
 - `aspect`: `16:9` `1:1` `3:4` `4:3` `9:16`, or raw `WxH` (free string, not an enum).
 - `style`: `auto` `slide` `fintech`.
+- `ref_mode`: `style` `logo` `asset` `render` `restyle` `architecture` - what the
+  model does with `ref_image` (instructions in `engine/ref_modes.py`). Render modes
+  skip enhance + the offline slide template (prompt sent verbatim).
 - `thinking`: `auto` `standard` `extended` `max`. Reasoning effort before drawing;
   higher = better rendered text (esp. Vietnamese diacritics) but slower. Sent to the
   backend as `thinking_effort`; **only these values are valid** (others -> HTTP 422).
@@ -60,7 +63,7 @@ uv run cgimg gen "test" --aspect 4:3 --thinking max --no-enhance
 
 Layout:
 - `src/cgimg/` - **our** code: `server.py`, `cli.py`, `sizes.py`, `types.py`,
-  `engine/` (`generate.py`, `enhance.py`, `image_thinking.py`), `ppt/`, `branding/`,
+  `engine/` (`generate.py`, `enhance.py`, `image_thinking.py`, `ref_modes.py`), `ppt/`, `branding/`,
   `auth/`.
 - `src/cgimg/_vendor/` - chatgpt2api, vendored. Two classes of file:
   - **VERBATIM** - byte-identical to upstream, auto-re-pulled. Everything except:
@@ -84,7 +87,7 @@ Rules (important):
 
 ## Conventions
 - Python 3.12, `uv`. Files < 200 lines, kebab-case names, descriptive comments.
-- `thinking`/`style` value sets live ONCE in `src/cgimg/types.py` (drives both the
+- `thinking`/`style`/`ref_mode` value sets live ONCE in `src/cgimg/types.py` (drives both the
   MCP schema enums and the CLI `choices`). Add new values there, not inline.
 - Multi-account auth lives in `auth/`: `store.py` (versioned `auth.json` v2 +
   legacy migration), `pool.py` (`AccountPool` - probe/rotate/decrement/persist),

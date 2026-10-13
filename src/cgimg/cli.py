@@ -6,7 +6,7 @@ from typing import get_args
 
 from cgimg.cli_accounts import _cmd_accounts, _cmd_logout
 from cgimg.console import force_utf8
-from cgimg.types import Style, Thinking
+from cgimg.types import RefMode, Style, Thinking
 
 
 def _add_thinking_arg(p: argparse.ArgumentParser) -> None:
@@ -51,7 +51,8 @@ def _cmd_gen(args: argparse.Namespace) -> int:
     paths = generate_image(args.prompt, aspect=args.aspect, n=args.n,
                            out_dir=args.out, enhance=args.enhance, style=args.style,
                            thinking=args.thinking, brand_colors=brand_colors,
-                           reserve_corner=args.reserve_corner)
+                           reserve_corner=args.reserve_corner,
+                           ref_image=args.ref_image, ref_mode=args.ref_mode)
     for p in paths:
         print(p)
     return 0
@@ -151,6 +152,13 @@ def main(argv: list[str] | None = None) -> int:
                    help="'slide' = clean editorial; 'fintech' = light-blue dashboard")
     _add_thinking_arg(g)
     _add_brand_args(g)
+    g.add_argument("--ref-image", dest="ref_image", default=None,
+                   help="path to a reference image the model SEES while drawing")
+    g.add_argument("--ref-mode", dest="ref_mode", default="style",
+                   choices=list(get_args(RefMode)),
+                   help="'style' = borrow only its look (default); 'logo'/'asset' = "
+                        "place that real logo into the image; 'render'/'restyle'/"
+                        "'architecture' = restyle a building render, keep its architecture")
     g.set_defaults(func=_cmd_gen, enhance=True)
 
     pp = sub.add_parser("ppt")

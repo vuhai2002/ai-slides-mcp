@@ -16,3 +16,7 @@ Thinking = Literal["auto", "standard", "extended", "max"]
 
 # Slide design treatment applied by the prompt enhancer.
 Style = Literal["auto", "slide", "fintech"]
+
+# What the model should do with an attached reference image (see engine/ref_modes.py).
+# "asset" aliases "logo"; "restyle" / "architecture" alias "render".
+RefMode = Literal["style", "logo", "asset", "render", "restyle", "architecture"]

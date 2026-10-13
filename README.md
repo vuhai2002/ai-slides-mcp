@@ -97,8 +97,10 @@ The config is the **same shape for Claude Code, Codex, and Antigravity**:
 Replace `cwd` with the absolute path where you cloned the repo (e.g. `D:\\ai-slides-mcp` on Windows — note the doubled backslashes in JSON). For Claude Code you can instead run:
 
 ```bash
-claude mcp add ai-slides -- uv run cgimg-mcp
+claude mcp add ai-slides -s user -- uv run --directory "<absolute path to the cloned repo>" cgimg-mcp
 ```
+
+`-s user` makes the server available in every folder; `--directory` lets `uv` find the project from any working directory. In PowerShell, quote the separator as `'--'` (PowerShell strips a bare `--` before native commands).
 
 ## MCP tools
 
@@ -107,13 +109,28 @@ Six tools are exposed by the server (`src/cgimg/server.py`):
 | Tool | Params | Returns | Description |
 |------|--------|---------|-------------|
 | `login_status` | — | `{authed, accounts, ready_count}` | List logged-in accounts (cheap, hint-based; use the CLI `cgimg accounts` for live quota). |
-| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None` | `{paths}` | Generate `n` image(s) from a prompt. Returns saved PNG paths. |
+| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None`, `ref_image=None`, `ref_mode="style"` | `{paths}` | Generate `n` image(s) from a prompt, optionally with a reference image (see below). Returns saved PNG paths. |
 | `build_pptx` | `image_paths`, `out_path="deck.pptx"`, `aspect="16:9"` | `{path}` | Assemble existing images into a full-bleed PPTX. |
 | `generate_slide_deck` | `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `enhance=True`, `style="slide"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None` | `{path, image_paths, incomplete, generated, total, reset_at}` | Generate one image per prompt (one slide each, named `s01.png`...), then assemble into a PPTX. Returns a partial deck (`incomplete=true`) if accounts run out of quota. |
 | `branded_deck` | `logo_path`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `logo_position="top-left"`, `logo_scale=0.15`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Auto-detects brand colors from the logo, generates slides in those colors, and composites the **original logo** onto each slide. |
 | `styled_deck` | `ref_image`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `thinking="auto"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Matches a **reference image's** design style + colors (does **not** copy its text/content). |
 
 For `generate_slide_deck` / `branded_deck` / `styled_deck`, each prompt is the **content of one slide** — pass raw slide content and the enhancer designs it.
+
+### Reference image (`ref_image` + `ref_mode`)
+
+`generate_image` (and CLI `gen --ref-image ... --ref-mode ...`) can attach an image the model SEES while drawing, like dragging it into ChatGPT:
+
+| `ref_mode` | Effect |
+|------------|--------|
+| `style` (default) | Borrow only the reference's look (palette, layout, typography); its text/content is not copied. |
+| `logo` (alias `asset`) | The reference is a real logo; the model places it into the image exactly as given (no redraw). |
+| `render` (aliases `restyle`, `architecture`) | The reference is a 3D render of a building (Blender, SketchUp, Lumion...). Massing, floors, openings, roof and camera stay; only materials, lighting and landscaping change. The prompt is sent verbatim (no enhance / slide template / brand colors). |
+
+```bash
+uv run cgimg gen "Indochine style, warm afternoon light" --ref-image render.png --ref-mode render --out out
+uv run cgimg gen "Product launch poster" --ref-image logo.png --ref-mode logo
+```
 
 ## Slide styles
 
