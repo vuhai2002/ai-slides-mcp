@@ -81,7 +81,7 @@ class AccountPool:
             except Exception:
                 invalid += 1  # probe failed: invalid/revoked token (or flaky backend)
                 continue
-            if res["unknown"] or (res["remaining"] or 0) > 0:
+            if (res["remaining"] or 0) > 0:
                 self._active_token = str(acc.get("access_token") or "")
                 return self._active_token
         self._active_token = None
@@ -136,9 +136,11 @@ class AccountPool:
 
     def probe(self, acc: dict[str, Any]) -> dict[str, Any]:
         """Probe get_user_info; update + persist the account (backfilling identity);
-        return ``{remaining, unknown, restore_at_epoch}``."""
+        return ``{remaining, restore_at_epoch}``.
+
+        Every plan reports a finite image quota (Pro is ~1000/day, not unlimited),
+        so a probe always yields a concrete counter to stick to and decrement."""
         info = probe_account(acc, self._probe_fn, self._refresh_fn)
-        unknown = bool(info.get("image_quota_unknown"))
         q = info.get("quota")
         remaining = int(q) if isinstance(q, (int, float)) and not isinstance(q, bool) else None
         now = self._now()
@@ -149,18 +151,14 @@ class AccountPool:
         # Informational backend refill time (display only; separate from restore_at).
         be = reset_at.to_epoch(info.get("restore_at"), now)
         acc["quota_reset_at"] = reset_at.to_iso(be) if be else None
-        if unknown:
-            acc["last_quota"] = None        # unknown counter -> try optimistically
-            acc.pop("restore_at", None)
+        acc["last_quota"] = remaining or 0
+        if (remaining or 0) <= 0:
+            epoch = reset_at.to_epoch(info.get("restore_at"), now) or reset_at.fallback(now)
+            acc["restore_at"] = reset_at.to_iso(epoch)
         else:
-            acc["last_quota"] = remaining or 0
-            if (remaining or 0) <= 0:
-                epoch = reset_at.to_epoch(info.get("restore_at"), now) or reset_at.fallback(now)
-                acc["restore_at"] = reset_at.to_iso(epoch)
-            else:
-                acc.pop("restore_at", None)
+            acc.pop("restore_at", None)
         store.save_accounts(self._accounts)
-        return {"remaining": remaining, "unknown": unknown,
+        return {"remaining": remaining,
                 "restore_at_epoch": reset_at.to_epoch(acc.get("restore_at"), now)}
 
     def is_exhausted(self) -> bool:

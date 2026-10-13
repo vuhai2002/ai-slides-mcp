@@ -7,9 +7,9 @@ from cgimg.auth import reset_at, store
 NOW = 1000.0
 
 
-def _info(quota=None, unknown=False, user_id="", email="", type="free", restore_at=None):
+def _info(quota=None, user_id="", email="", type="free", restore_at=None):
     """Build a get_user_info-shaped dict."""
-    return {"quota": quota, "image_quota_unknown": unknown, "user_id": user_id,
+    return {"quota": quota, "user_id": user_id,
             "email": email, "type": type, "restore_at": restore_at}
 
 
@@ -88,15 +88,6 @@ def test_hint_dead_account_skipped_without_probe(seeded):
     assert p.select() == "tokB"
     assert stub.calls.get("tokA", 0) == 0    # never probed the dead one
     assert stub.calls["tokB"] == 1
-
-
-def test_unknown_quota_is_tried_and_reprobed(seeded):
-    seeded([{"user_id": "uA", "access_token": "tokA"}])
-    stub = StubProbe({"tokA": [_info(unknown=True, quota=0)]})
-    p = _pool(stub)
-    assert p.select() == "tokA"          # unknown -> usable
-    assert p.select() == "tokA"          # not stickable -> re-probed
-    assert stub.calls["tokA"] == 2
 
 
 def test_probe_backfills_user_id_and_email(seeded):
@@ -198,7 +189,7 @@ def test_select_skips_account_whose_probe_raises(seeded):
     def probe_fn(acc):
         if acc["access_token"] == "tokA":
             raise RuntimeError("boom")   # A's probe fails -> select must skip to B
-        return {"quota": 3, "image_quota_unknown": False, "user_id": "uB"}
+        return {"quota": 3, "user_id": "uB"}
 
     p = pool_mod.AccountPool(probe_fn=probe_fn, now_fn=lambda: NOW)
     assert p.select() == "tokB"
@@ -216,7 +207,7 @@ def test_probe_force_refreshes_on_invalid_token(seeded):
         calls["probe"] += 1
         if calls["probe"] == 1:
             raise InvalidAccessTokenError("token invalidated")
-        return {"quota": 4, "image_quota_unknown": False, "user_id": "uA"}
+        return {"quota": 4, "user_id": "uA"}
 
     forced = {"v": False}
 

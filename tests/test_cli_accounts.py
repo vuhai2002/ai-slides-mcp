@@ -44,7 +44,7 @@ def test_accounts_lists_with_live_probe(store_at, monkeypatch, capsys):
     import cgimg.auth.pool as pool_mod
     store.save_accounts([{"user_id": "uA", "email": "a@x.com", "access_token": "tokA"}])
     monkeypatch.setattr(pool_mod, "default_probe", lambda acc: {
-        "quota": 7, "image_quota_unknown": False,
+        "quota": 7,
         "user_id": "uA", "email": "a@x.com", "type": "free"})
     rc = cli.main(["accounts"])
     out = capsys.readouterr().out

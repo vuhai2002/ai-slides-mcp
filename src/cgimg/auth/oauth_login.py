@@ -113,7 +113,7 @@ def _account_from_tokens(toks: dict[str, str]) -> dict:
         account["email"] = info.get("email") or ""
         account["type"] = info.get("type") or "free"
         q = info.get("quota")
-        if isinstance(q, (int, float)) and not info.get("image_quota_unknown"):
+        if isinstance(q, (int, float)):
             account["last_quota"] = int(q)  # seed the hint for the first run
     except Exception:
         pass

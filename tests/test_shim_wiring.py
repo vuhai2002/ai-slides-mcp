@@ -58,7 +58,7 @@ def test_text_and_image_share_active_account(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "_auth_path", lambda: tmp_path / "auth.json")
     store.save_accounts([{"user_id": "uA", "access_token": "tokA"}])
     p = pool_mod.AccountPool(
-        probe_fn=lambda acc: {"quota": 5, "image_quota_unknown": False, "user_id": "uA"},
+        probe_fn=lambda acc: {"quota": 5, "user_id": "uA"},
         now_fn=lambda: 1000.0,
     )
     shim.set_pool_provider(
