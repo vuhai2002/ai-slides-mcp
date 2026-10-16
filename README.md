@@ -104,16 +104,17 @@ claude mcp add ai-slides -s user -- uv run --directory "<absolute path to the cl
 
 ## MCP tools
 
-Six tools are exposed by the server (`src/cgimg/server.py`):
+Seven tools are exposed by the server (`src/cgimg/server.py`):
 
 | Tool | Params | Returns | Description |
 |------|--------|---------|-------------|
 | `login_status` | — | `{authed, accounts, ready_count}` | List logged-in accounts (cheap, hint-based; use the CLI `cgimg accounts` for live quota). |
-| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None`, `ref_image=None`, `ref_mode="style"` | `{paths}` | Generate `n` image(s) from a prompt, optionally with a reference image (see below). Returns saved PNG paths. |
+| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors=None`, `reserve_corner=None`, `ref_image=None`, `ref_mode="style"`, `model=None` | `{paths}` | Generate `n` image(s) from a prompt, optionally with a reference image (see below). Returns saved PNG paths. |
 | `build_pptx` | `image_paths`, `out_path="deck.pptx"`, `aspect="16:9"` | `{path}` | Assemble existing images into a full-bleed PPTX. |
-| `generate_slide_deck` | `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `enhance=True`, `style="slide"`, `thinking="max"`, `brand_colors=None`, `reserve_corner=None` | `{path, image_paths, incomplete, generated, total, reset_at}` | Generate one image per prompt (one slide each, named `s01.png`...), then assemble into a PPTX. Returns a partial deck (`incomplete=true`) if accounts run out of quota. |
-| `branded_deck` | `logo_path`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `logo_position="top-left"`, `logo_scale=0.15`, `thinking="max"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Auto-detects brand colors from the logo, generates slides in those colors, and composites the **original logo** onto each slide. |
-| `styled_deck` | `ref_image`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `thinking="max"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Matches a **reference image's** design style + colors (does **not** copy its text/content). |
+| `generate_slide_deck` | `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `enhance=True`, `style="slide"`, `thinking="max"`, `brand_colors=None`, `reserve_corner=None`, `model=None` | `{path, image_paths, incomplete, generated, total, reset_at}` | Generate one image per prompt (one slide each, named `s01.png`...), then assemble into a PPTX. Returns a partial deck (`incomplete=true`) if accounts run out of quota. |
+| `branded_deck` | `logo_path`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `logo_position="top-left"`, `logo_scale=0.15`, `thinking="max"`, `model=None` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Auto-detects brand colors from the logo, generates slides in those colors, and composites the **original logo** onto each slide. |
+| `styled_deck` | `ref_image`, `prompts`, `aspect="16:9"`, `out_pptx="deck.pptx"`, `out_dir="out"`, `thinking="max"`, `model=None` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` | Matches a **reference image's** design style + colors (does **not** copy its text/content). |
+| `list_models` | - | `{models, newest, default}` | Chat models the accounts may use as `model` (e.g. `gpt-6`); `newest` = highest plain `gpt-N`, `default` = `gpt-5-5`. |
 
 For `generate_slide_deck` / `branded_deck` / `styled_deck`, each prompt is the **content of one slide** — pass raw slide content and the enhancer designs it.
 
@@ -172,6 +173,7 @@ uv run cgimg login --callback "<paste callback URL>"
 uv run cgimg accounts                    # list accounts with live remaining quota
 uv run cgimg logout you@example.com      # remove one (by email or user_id)
 uv run cgimg logout --all                # remove every account
+uv run cgimg models                      # chat models usable as --model (newest/default marked)
 #   The pool auto-rotates: it drains one account, then moves to the next. A deck
 #   bigger than your total quota stops and returns a PARTIAL deck + reset time.
 #   Note: rotating many accounts raises ban-detection risk - use throwaway accounts.
@@ -182,6 +184,7 @@ uv run cgimg gen "AI agents for customer support" --style slide      # clean edi
 uv run cgimg gen "real-time fraud detection" --style fintech         # light-blue dashboard slide
 uv run cgimg gen "ai agent" --aspect 1:1 --no-enhance                # send prompt verbatim
 uv run cgimg gen "Trí tuệ nhân tạo cho doanh nghiệp" --thinking max  # max reasoning = best Vietnamese text
+uv run cgimg gen "Chuyển đổi số" --model gpt-6 --thinking max --no-enhance  # newer orchestrating model, prompt verbatim
 uv run cgimg gen "RAG pipeline" --style slide --accent "#10B981" --reserve-corner top-left  # brand color + clear corner for a logo
 
 # 3. Generate a multi-slide deck (one image per prompt; slides saved s01.png, s02.png...)

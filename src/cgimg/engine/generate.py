@@ -31,6 +31,7 @@ from services.protocol.conversation import (  # noqa: E402
 from cgimg.engine.enhance import enhance_prompt, template_enhance  # noqa: E402
 from cgimg.engine import image_thinking  # noqa: E402  (installs the thinking-effort patch)
 from cgimg.engine.ref_modes import is_render_mode, ref_suffix  # noqa: E402
+from cgimg.engine.upstream_model import use_upstream_model  # noqa: E402
 
 _SLIDE_STYLES = ("slide", "fintech")
 
@@ -77,6 +78,7 @@ def generate_image(
     thinking: Thinking = "auto",
     brand_colors: list[str] | None = None,
     reserve_corner: str | None = None,
+    model: str | None = None,
 ) -> list[str]:
     """Generate n image(s) and save them as PNGs. Returns saved file paths.
 
@@ -105,6 +107,10 @@ def generate_image(
     enhance=False, supplying a slide style / brand_colors / reserve_corner routes
     through the deterministic offline template (concise, no LLM bloat) instead of
     being silently ignored.
+
+    model picks the ChatGPT chat model that orchestrates the drawing (e.g. "gpt-6",
+    "gpt-5-6"); None keeps the vendor default (gpt-5-5). The image model itself is
+    chosen server-side. See engine/upstream_model.py.
     """
     size = resolve_size(aspect)
     render = bool(ref_image) and is_render_mode(ref_mode)
@@ -148,9 +154,10 @@ def generate_image(
     try:
         # The pool wrapper calls account_service.get_available_access_token()
         # internally (our shim -> our token), so no manual backend construction.
-        saved, message = _collect_saved(
-            stream_image_outputs_with_pool(request), n, out_dir
-        )
+        with use_upstream_model(model):
+            saved, message = _collect_saved(
+                stream_image_outputs_with_pool(request), n, out_dir
+            )
     finally:
         image_thinking.set_thinking("auto")
 

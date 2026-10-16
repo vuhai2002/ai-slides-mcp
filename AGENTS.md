@@ -26,13 +26,14 @@ for agents that **develop** the repo, and as a human-readable mirror of the tool
 | Tool | Key params (defaults) | Returns |
 |------|-----------------------|---------|
 | `login_status` | - | `{authed, accounts, ready_count}` |
-| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors`, `reserve_corner`, `ref_image=None`, `ref_mode="style"` | `{paths}` |
+| `generate_image` | `prompt`, `aspect="16:9"`, `n=1`, `out_dir="out"`, `enhance=True`, `style="auto"`, `thinking="auto"`, `brand_colors`, `reserve_corner`, `ref_image=None`, `ref_mode="style"`, `model=None` | `{paths}` |
 | `build_pptx` | `image_paths`, `out_path="deck.pptx"`, `aspect="16:9"` | `{path}` |
-| `generate_slide_deck` | `prompts`, `aspect`, `out_pptx`, `out_dir`, `enhance=True`, `style="slide"`, `thinking="max"` | `{path, image_paths, incomplete, generated, total, reset_at}` |
-| `branded_deck` | `logo_path`, `prompts`, ..., `logo_position`, `logo_scale`, `thinking="max"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` |
-| `styled_deck` | `ref_image`, `prompts`, ..., `thinking="max"` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` |
+| `generate_slide_deck` | `prompts`, `aspect`, `out_pptx`, `out_dir`, `enhance=True`, `style="slide"`, `thinking="max"`, `model=None` | `{path, image_paths, incomplete, generated, total, reset_at}` |
+| `branded_deck` | `logo_path`, `prompts`, ..., `logo_position`, `logo_scale`, `thinking="max"`, `model=None` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` |
+| `styled_deck` | `ref_image`, `prompts`, ..., `thinking="max"`, `model=None` | `{path, image_paths, brand_colors, incomplete, generated, total, reset_at}` |
+| `list_models` | - | `{models, newest, default}` |
 
-The same functions back the CLI (`uv run cgimg <gen|ppt|branded|styled|login|accounts|logout>`).
+The same functions back the CLI (`uv run cgimg <gen|deck|ppt|branded|styled|login|accounts|logout|models>`).
 
 `login_status` returns the account pool summary from cheap persisted hints
 (`{authed, accounts:[{email,type,alive,restore_at}], ready_count}`); the CLI
@@ -46,6 +47,11 @@ PARTIAL deck when every account is out of quota (`incomplete=True` + `generated`
 - `ref_mode`: `style` `logo` `asset` `render` `restyle` `architecture` - what the
   model does with `ref_image` (instructions in `engine/ref_modes.py`). Render modes
   skip enhance + the offline slide template (prompt sent verbatim).
+- `model` (free string, not an enum): the ChatGPT chat model that orchestrates the
+  drawing, e.g. `gpt-6`, `gpt-5-6`; `None` keeps the vendor default `gpt-5-5`. The
+  image model itself is picked server-side. Valid slugs differ per account:
+  `list_models` / `cgimg models` (one probe + 2 light calls). Override is per call via
+  `engine/upstream_model.py` (in-memory vendor config, restored after the request).
 - `thinking`: `auto` `standard` `extended` `max`. Reasoning effort before drawing;
   higher = better rendered text (esp. Vietnamese diacritics) but slower. Sent to the
   backend as `thinking_effort`; **only these values are valid** (others -> HTTP 422).
@@ -65,7 +71,7 @@ uv run cgimg gen "test" --aspect 4:3 --thinking max --no-enhance
 
 Layout:
 - `src/cgimg/` - **our** code: `server.py`, `cli.py`, `sizes.py`, `types.py`,
-  `engine/` (`generate.py`, `enhance.py`, `image_thinking.py`, `ref_modes.py`), `ppt/`, `branding/`,
+  `engine/` (`generate.py`, `enhance.py`, `image_thinking.py`, `ref_modes.py`, `upstream_model.py`), `ppt/`, `branding/`,
   `auth/`.
 - `src/cgimg/_vendor/` - chatgpt2api, vendored. Two classes of file:
   - **VERBATIM** - byte-identical to upstream, auto-re-pulled. Everything except:

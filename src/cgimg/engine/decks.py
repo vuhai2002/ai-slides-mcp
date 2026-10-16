@@ -51,13 +51,14 @@ def build_slide_deck(
     brand_colors: list[str] | None = None,
     reserve_corner: str | None = None,
     thinking: Thinking = DECK_THINKING,
+    model: str | None = None,
     name_prefix: str = "s",
 ) -> dict:
     """Generate one image per prompt, name them `<prefix>NN.png`, assemble a PPTX.
 
     Returns {path, image_paths, incomplete, generated, total, reset_at}. Each
     prompt is the content of one slide. See generate_image for the meaning of
-    style / brand_colors / reserve_corner / thinking (all forwarded per slide).
+    style / brand_colors / reserve_corner / thinking / model (all forwarded per slide).
     """
     if not prompts:
         raise ValueError("no prompts provided")
@@ -72,6 +73,7 @@ def build_slide_deck(
             paths = generate_image(
                 prompt, aspect=aspect, n=1, out_dir=out_dir, enhance=enhance, style=style,
                 brand_colors=brand_colors, reserve_corner=reserve_corner, thinking=thinking,
+                model=model,
             )
         except Exception:
             exhausted, reset_at = pool_exhausted_reset()

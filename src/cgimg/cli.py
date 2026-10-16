@@ -1,29 +1,14 @@
-"""cgimg CLI: login / gen / deck / ppt / branded / styled."""
+"""cgimg CLI: login / accounts / logout / models / gen / deck / ppt / branded / styled."""
 from __future__ import annotations
 import argparse
 import sys
 from typing import get_args
 
 from cgimg.cli_accounts import _cmd_accounts, _cmd_logout
+from cgimg.cli_args import add_brand_args, add_model_arg, add_thinking_arg
+from cgimg.cli_models import _cmd_models
 from cgimg.console import force_utf8
-from cgimg.types import DECK_THINKING, RefMode, Style, Thinking
-
-
-def _add_thinking_arg(p: argparse.ArgumentParser, default: str = "auto") -> None:
-    """Shared --thinking option for image-generating subcommands."""
-    p.add_argument("--thinking", default=default, choices=list(get_args(Thinking)),
-                   help=f"image reasoning effort (auto<standard<extended<max, default "
-                        f"{default}); higher = better rendered text (e.g. VN diacritics)")
-
-
-def _add_brand_args(p: argparse.ArgumentParser) -> None:
-    """Shared --accent / --reserve-corner options for slide-styling subcommands."""
-    p.add_argument("--accent", default=None,
-                   help="brand accent color hex, e.g. #10B981 (applied to bg/accents/text)")
-    p.add_argument("--reserve-corner", dest="reserve_corner", default=None,
-                   choices=["top-left", "top-right", "bottom-left", "bottom-right"],
-                   help="keep this corner clear for a logo you add later; "
-                        "the model draws no logo/text there")
+from cgimg.types import DECK_THINKING, RefMode, Style
 
 
 def _cmd_login(args: argparse.Namespace) -> int:
@@ -52,7 +37,8 @@ def _cmd_gen(args: argparse.Namespace) -> int:
                            out_dir=args.out, enhance=args.enhance, style=args.style,
                            thinking=args.thinking, brand_colors=brand_colors,
                            reserve_corner=args.reserve_corner,
-                           ref_image=args.ref_image, ref_mode=args.ref_mode)
+                           ref_image=args.ref_image, ref_mode=args.ref_mode,
+                           model=args.model)
     for p in paths:
         print(p)
     return 0
@@ -92,7 +78,7 @@ def _cmd_deck(args: argparse.Namespace) -> int:
     result = build_slide_deck(_load_prompts(args), aspect=args.aspect, out_pptx=args.out,
                               out_dir=args.out_dir, enhance=args.enhance, style=args.style,
                               brand_colors=brand_colors, reserve_corner=args.reserve_corner,
-                              thinking=args.thinking)
+                              thinking=args.thinking, model=args.model)
     _print_deck(result)
     return 0
 
@@ -108,7 +94,7 @@ def _cmd_branded(args: argparse.Namespace) -> int:
     result = branded_deck(args.logo_path, args.prompts, aspect=args.aspect,
                           out_pptx=args.out, out_dir=args.out_dir,
                           logo_position=args.position, logo_scale=args.scale,
-                          thinking=args.thinking)
+                          thinking=args.thinking, model=args.model)
     _print_deck(result, colors=True)
     return 0
 
@@ -117,7 +103,7 @@ def _cmd_styled(args: argparse.Namespace) -> int:
     from cgimg.branding.deck import styled_deck
     result = styled_deck(args.ref_image, args.prompts, aspect=args.aspect,
                          out_pptx=args.out, out_dir=args.out_dir,
-                         thinking=args.thinking)
+                         thinking=args.thinking, model=args.model)
     _print_deck(result, colors=True)
     return 0
 
@@ -141,6 +127,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="remove ALL accounts")
     lo.set_defaults(func=_cmd_logout)
 
+    md = sub.add_parser("models", help="list chat models usable as --model (newest/default marked)")
+    md.set_defaults(func=_cmd_models)
+
     g = sub.add_parser("gen")
     g.add_argument("prompt")
     g.add_argument("--aspect", default="16:9")
@@ -150,8 +139,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="skip auto-expanding the prompt via the ChatGPT text path")
     g.add_argument("--style", default="auto", choices=list(get_args(Style)),
                    help="'slide' = clean editorial; 'fintech' = light-blue dashboard")
-    _add_thinking_arg(g)
-    _add_brand_args(g)
+    add_thinking_arg(g)
+    add_model_arg(g)
+    add_brand_args(g)
     g.add_argument("--ref-image", dest="ref_image", default=None,
                    help="path to a reference image the model SEES while drawing")
     g.add_argument("--ref-mode", dest="ref_mode", default="style",
@@ -175,7 +165,8 @@ def main(argv: list[str] | None = None) -> int:
     br.add_argument("--aspect", default="16:9")
     br.add_argument("--position", default="top-left")
     br.add_argument("--scale", type=float, default=0.15)
-    _add_thinking_arg(br, DECK_THINKING)
+    add_thinking_arg(br, DECK_THINKING)
+    add_model_arg(br)
     br.set_defaults(func=_cmd_branded)
 
     st = sub.add_parser("styled")
@@ -184,7 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--out", default="deck.pptx")
     st.add_argument("--out-dir", dest="out_dir", default="out")
     st.add_argument("--aspect", default="16:9")
-    _add_thinking_arg(st, DECK_THINKING)
+    add_thinking_arg(st, DECK_THINKING)
+    add_model_arg(st)
     st.set_defaults(func=_cmd_styled)
 
     dk = sub.add_parser("deck", help="generate a multi-slide PPTX (one image per prompt)")
@@ -198,8 +190,9 @@ def main(argv: list[str] | None = None) -> int:
     dk.add_argument("--no-enhance", dest="enhance", action="store_false",
                     help="skip the LLM enhance; a --style still applies via offline template")
     dk.add_argument("--style", default="slide", choices=list(get_args(Style)))
-    _add_thinking_arg(dk, DECK_THINKING)
-    _add_brand_args(dk)
+    add_thinking_arg(dk, DECK_THINKING)
+    add_model_arg(dk)
+    add_brand_args(dk)
     dk.set_defaults(func=_cmd_deck, enhance=True)
 
     args = p.parse_args(argv)

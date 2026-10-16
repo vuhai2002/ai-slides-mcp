@@ -29,7 +29,8 @@ def generate_image(prompt: str, aspect: str = "16:9", n: int = 1,
                    brand_colors: list[str] | None = None,
                    reserve_corner: str | None = None,
                    ref_image: str | None = None,
-                   ref_mode: RefMode = "style") -> dict:
+                   ref_mode: RefMode = "style",
+                   model: str | None = None) -> dict:
     """Generate image(s) from a text prompt at the given aspect ratio
     (16:9, 1:1, 3:4, 4:3, 9:16, or WxH). Returns saved PNG file paths.
 
@@ -57,12 +58,15 @@ def generate_image(prompt: str, aspect: str = "16:9", n: int = 1,
     a building: massing, floors, openings, roof and camera stay the same, only
     materials, lighting and landscaping change; enhance/style/brand_colors are
     skipped and the prompt is sent verbatim. Pass absolute paths for ref_image
-    and out_dir."""
+    and out_dir.
+
+    model ('gpt-6', 'gpt-5-6', ...; default None = gpt-5-5) picks the ChatGPT chat
+    model that orchestrates the drawing; list valid ones with list_models."""
     from cgimg.engine.generate import generate_image as _gen
     return {"paths": _gen(prompt, aspect=aspect, n=n, out_dir=out_dir,
                           enhance=enhance, style=style, thinking=thinking,
                           brand_colors=brand_colors, reserve_corner=reserve_corner,
-                          ref_image=ref_image, ref_mode=ref_mode)}
+                          ref_image=ref_image, ref_mode=ref_mode, model=model)}
 
 
 @mcp.tool()
@@ -79,7 +83,8 @@ def generate_slide_deck(prompts: list[str], aspect: str = "16:9",
                         enhance: bool = True, style: Style = "slide",
                         thinking: Thinking = DECK_THINKING,
                         brand_colors: list[str] | None = None,
-                        reserve_corner: str | None = None) -> dict:
+                        reserve_corner: str | None = None,
+                        model: str | None = None) -> dict:
     """Generate one image per prompt then assemble them into a PPTX deck.
 
     Each prompt should be the CONTENT of one slide. style='slide' (default here)
@@ -94,41 +99,59 @@ def generate_slide_deck(prompts: list[str], aspect: str = "16:9",
 
     If every logged-in account runs out of image quota mid-deck, generation stops
     and a PARTIAL deck is returned: the result carries incomplete=True, generated,
-    total, and reset_at (when quota next resets). Re-run later to make the rest."""
+    total, and reset_at (when quota next resets). Re-run later to make the rest.
+
+    model ('gpt-6', 'gpt-5-6', ...; default None = gpt-5-5) picks the ChatGPT chat
+    model that orchestrates the drawing; list valid ones with list_models."""
     from cgimg.engine.decks import build_slide_deck
     return build_slide_deck(prompts, aspect=aspect, out_pptx=out_pptx, out_dir=out_dir,
                             enhance=enhance, style=style, brand_colors=brand_colors,
-                            reserve_corner=reserve_corner, thinking=thinking)
+                            reserve_corner=reserve_corner, thinking=thinking, model=model)
 
 
 @mcp.tool()
 def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
                  out_pptx: str = "deck.pptx", out_dir: str = "out",
                  logo_position: str = "top-left", logo_scale: float = 0.15,
-                 thinking: Thinking = DECK_THINKING) -> dict:
+                 thinking: Thinking = DECK_THINKING, model: str | None = None) -> dict:
     """Build a branded slide deck: auto-detect brand colors from the logo, generate
     slides in those colors, composite the original logo onto each slide, assemble PPTX.
 
     thinking ('auto'/'standard'/'extended'/'max', default 'max') sets image
     reasoning effort; 'max' renders Vietnamese text most reliably. Pass 'auto'
-    only when speed matters more than text accuracy."""
+    only when speed matters more than text accuracy. model ('gpt-6', ...; default
+    None = gpt-5-5) picks the orchestrating chat model; see list_models."""
     from cgimg.branding.deck import branded_deck as _bd
     return _bd(logo_path, prompts, aspect=aspect, out_pptx=out_pptx, out_dir=out_dir,
-               logo_position=logo_position, logo_scale=logo_scale, thinking=thinking)
+               logo_position=logo_position, logo_scale=logo_scale, thinking=thinking,
+               model=model)
 
 
 @mcp.tool()
 def styled_deck(ref_image: str, prompts: list[str], aspect: str = "16:9",
                 out_pptx: str = "deck.pptx", out_dir: str = "out",
-                thinking: Thinking = DECK_THINKING) -> dict:
+                thinking: Thinking = DECK_THINKING, model: str | None = None) -> dict:
     """Generate a deck matching a reference design image's style and colors (content not copied).
 
     thinking ('auto'/'standard'/'extended'/'max', default 'max') sets image
     reasoning effort; 'max' renders Vietnamese text most reliably. Pass 'auto'
-    only when speed matters more than text accuracy."""
+    only when speed matters more than text accuracy. model ('gpt-6', ...; default
+    None = gpt-5-5) picks the orchestrating chat model; see list_models."""
     from cgimg.branding.deck import styled_deck as _sd
     return _sd(ref_image, prompts, aspect=aspect, out_pptx=out_pptx, out_dir=out_dir,
-               thinking=thinking)
+               thinking=thinking, model=model)
+
+
+@mcp.tool()
+def list_models() -> dict:
+    """List the ChatGPT chat models the logged-in accounts may use to drive image
+    generation (pass one as `model` to the image/deck tools). Returns
+    {models, newest, default}: newest = highest plain gpt-N slug, default = the one
+    used when model is omitted. Costs one account probe + 2 light backend calls."""
+    from cgimg.engine.generate import get_pool
+    from cgimg.engine.upstream_model import list_chat_models, newest_model
+    models = list_chat_models(get_pool().current_token())
+    return {"models": models, "newest": newest_model(models), "default": "gpt-5-5"}
 
 
 def main() -> None:

@@ -23,7 +23,7 @@ from cgimg.types import DECK_THINKING, Thinking
 def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
                  out_pptx: str = "deck.pptx", out_dir: str = "out",
                  logo_position: str = "top-left", logo_scale: float = 0.15,
-                 thinking: Thinking = DECK_THINKING) -> dict:
+                 thinking: Thinking = DECK_THINKING, model: str | None = None) -> dict:
     """Build a branded deck and return its path, slide images, brand colors, and
     partial-deck status (incomplete/generated/total/reset_at).
 
@@ -45,7 +45,7 @@ def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
         enhanced = enhance_prompt(prompt, brand_colors=colors, reserve_corner=logo_position)
         try:
             imgs = generate_image(enhanced, aspect=aspect, n=1, out_dir=out_dir,
-                                  enhance=False, thinking=thinking)
+                                  enhance=False, thinking=thinking, model=model)
         except Exception:
             exhausted, reset_at = pool_exhausted_reset()
             if exhausted:
@@ -64,7 +64,7 @@ def branded_deck(logo_path: str, prompts: list[str], aspect: str = "16:9",
 
 def styled_deck(ref_image: str, prompts: list[str], aspect: str = "16:9",
                 out_pptx: str = "deck.pptx", out_dir: str = "out",
-                thinking: Thinking = DECK_THINKING) -> dict:
+                thinking: Thinking = DECK_THINKING, model: str | None = None) -> dict:
     """Generate a slide deck whose design MATCHES a reference image (style + colors).
 
     - extract brand colors from ref_image
@@ -97,7 +97,8 @@ def styled_deck(ref_image: str, prompts: list[str], aspect: str = "16:9",
         for attempt in range(1, 4):
             try:
                 imgs = generate_image(enhanced, aspect=aspect, n=1, out_dir=out_dir,
-                                      enhance=False, ref_image=ref_image, thinking=thinking)
+                                      enhance=False, ref_image=ref_image, thinking=thinking,
+                                      model=model)
                 img = imgs[0]
                 break
             except Exception as exc:
